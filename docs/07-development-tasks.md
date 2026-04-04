@@ -40,10 +40,10 @@ Module: BASE(基础) / AUTH(认证) / USER(用户) / SKILL(技能市场) / BOUNT
 | P1-BASE-005 | Redis 连接配置 | [B] | 配置 django-redis，封装缓存工具函数 | P0 | 1h | 001 | ✅ 完成 |
 | P1-BASE-006 | 环境变量管理 | [B] | 配置 python-decouple，创建 .env.example 文件 | P0 | 1h | 001 | ✅ 完成 |
 | P1-BASE-007 | 全局布局组件 | [F] | Header（导航栏）、Footer、MainLayout，配置 React Router v7 | P0 | 4h | 002 | ✅ 完成 |
-| P1-BASE-008 | shadcn/ui 组件安装 | [F] | 安装常用基础组件：Button, Card, Dialog, Input, Select, Tabs, Toast, Badge, Avatar, Dropdown, Skeleton | P0 | 2h | 002 | ❌ 未完成 |
-| P1-BASE-009 | 通用共享组件 | [F] | SearchBar, Pagination, TagInput, EmptyState, LoadingSkeleton, ConfirmDialog | P1 | 4h | 008 | 🔶 部分完成（SearchBar + Pagination 已创建，缺 TagInput/EmptyState/LoadingSkeleton/ConfirmDialog） |
-| P1-BASE-010 | API 客户端生成 | [F] | 基于 Django Ninja 的 OpenAPI Schema，使用 openapi-typescript-codegen 生成类型安全的 API 客户端 | P0 | 3h | 004 | ❌ 未完成（需后端运行后执行 pnpm generate-api） |
-| P1-BASE-011 | 工具函数库 | [B+F] | 后端：utils（格式化、常量）；前端：utils.ts + constants.ts（日期、金额格式化、枚举映射） | P1 | 2h | 001, 002 | 🔶 部分完成（前端 utils.ts + constants.ts 已创建，后端 utils 未实现） |
+| P1-BASE-008 | shadcn/ui 组件安装 | [F] | 安装常用基础组件：Button, Card, Dialog, Input, Select, Tabs, Toast, Badge, Avatar, Dropdown, Skeleton | P0 | 2h | 002 | ✅ 完成 |
+| P1-BASE-009 | 通用共享组件 | [F] | SearchBar, Pagination, TagInput, EmptyState, LoadingSkeleton, ConfirmDialog | P1 | 4h | 008 | ✅ 完成 |
+| P1-BASE-010 | API 客户端生成 | [F] | 基于 Django Ninja 的 OpenAPI Schema，使用 openapi-typescript-codegen 生成类型安全的 API 客户端 | P0 | 3h | 004 | ❌ 未完成（可用替代方案：直接使用 axios，类型可后续补充） |
+| P1-BASE-011 | 工具函数库 | [B+F] | 后端：utils（格式化、常量）；前端：utils.ts + constants.ts（日期、金额格式化、枚举映射） | P1 | 2h | 001, 002 | ✅ 完成 |
 
 #### P1-BASE-001 详细步骤（后端脚手架）
 
@@ -185,15 +185,15 @@ npx shadcn@latest add button card dialog input select tabs toast badge avatar dr
 
 | 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
 |--------|---------|-----|------|--------|------|------|
-| P1-AUTH-001 | django-allauth + JWT 配置 | [B] | 配置 django-allauth + simplejwt，JWT access/refresh 策略 | P0 | 3h | BASE-003 |
-| P1-AUTH-002 | Email 密码注册/登录 API | [B] | 注册、登录、登出接口，密码哈希（Django 内置） | P0 | 4h | AUTH-001 |
+| P1-AUTH-001 | django-allauth + JWT 配置 | [B] | 配置 django-allauth + simplejwt，JWT access/refresh 策略 | P0 | 3h | BASE-003 | ✅ 完成 |
+| P1-AUTH-002 | Email 密码注册/登录 API | [B] | 注册、登录、登出接口，密码哈希（Django 内置） | P0 | 4h | AUTH-001 | ✅ 完成 |
 | P1-AUTH-003 | GitHub OAuth | [B] | 配置 django-allauth GitHub Provider，返回 JWT | P1 | 2h | AUTH-001 |
 | P1-AUTH-004 | Google OAuth | [B] | 配置 django-allauth Google Provider，返回 JWT | P1 | 2h | AUTH-001 |
 | P1-AUTH-005 | 邮箱验证 | [B] | django-allauth 内置邮箱验证流程 + 自定义模板 | P1 | 2h | AUTH-002 |
 | P1-AUTH-006 | 忘记密码/重置密码 | [B] | 重置密码 API + 邮件发送 | P1 | 3h | AUTH-002 |
-| P1-AUTH-007 | 登录/注册页面 | [F] | 登录页、注册页 UI（含 OAuth 按钮），对接后端 API | P0 | 4h | AUTH-001, BASE-010 |
-| P1-AUTH-008 | Auth 中间件 | [B+F] | 后端：JWT 权限校验；前端：路由守卫（/profile, /admin 等） | P0 | 3h | AUTH-001, BASE-007 |
-| P1-AUTH-009 | useAuth Hook | [F] | useAuth() hook：JWT 存储/刷新、获取当前用户信息、登出 | P0 | 2h | AUTH-001, BASE-010 |
+| P1-AUTH-007 | 登录/注册页面 | [F] | 登录页、注册页 UI（含 OAuth 按钮），对接后端 API | P0 | 4h | AUTH-001, BASE-010 | ✅ 完成 |
+| P1-AUTH-008 | Auth 中间件 | [B+F] | 后端：JWT 权限校验；前端：路由守卫（/profile, /admin 等） | P0 | 3h | AUTH-001, BASE-007 | ✅ 完成 |
+| P1-AUTH-009 | useAuth Hook | [F] | useAuth() hook：JWT 存储/刷新、获取当前用户信息、登出 | P0 | 2h | AUTH-001, BASE-010 | ✅ 完成 |
 
 ---
 
@@ -201,11 +201,11 @@ npx shadcn@latest add button card dialog input select tabs toast badge avatar dr
 
 | 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
 |--------|---------|-----|------|--------|------|------|
-| P1-USER-001 | 用户 API Router | [B] | Django Ninja userRouter：get_me, update_profile, get_profile, get_my_stats | P0 | 4h | AUTH-001, BASE-004 |
-| P1-USER-002 | 个人资料设置页 | [F] | 编辑显示名、头像、简介 | P0 | 3h | USER-001, BASE-010 |
+| P1-USER-001 | 用户 API Router | [B] | Django Ninja userRouter：get_me, update_profile, get_profile, get_my_stats | P0 | 4h | AUTH-001, BASE-004 | ✅ 完成 |
+| P1-USER-002 | 个人资料设置页 | [F] | 编辑显示名、头像、简介 | P0 | 3h | USER-001, BASE-010 | ✅ 完成 |
 | P1-USER-003 | 公开用户页 | [F] | /u/:username 公开资料页，展示统计数据和贡献 | P1 | 3h | USER-001 |
-| P1-USER-004 | 信用分服务 | [B] | CreditService：add_credit, deduct_credit, calculate_level（Django 服务层） | P0 | 4h | BASE-003 |
-| P1-USER-005 | 信用分 UI 组件 | [F] | CreditBadge（等级徽章）、CreditProgress（进度条）、等级特权展示 | P0 | 3h | USER-004, BASE-010 |
+| P1-USER-004 | 信用分服务 | [B] | CreditService：add_credit, deduct_credit, calculate_level（Django 服务层） | P0 | 4h | BASE-003 | ✅ 完成 |
+| P1-USER-005 | 信用分 UI 组件 | [F] | CreditBadge（等级徽章）、CreditProgress（进度条）、等级特权展示 | P0 | 3h | USER-004, BASE-010 | ✅ 完成 |
 | P1-USER-006 | 信用分历史页 | [F] | 信用分变动记录列表 | P1 | 2h | USER-004 |
 | P1-USER-007 | 头像上传 | [B+F] | 后端：Django 文件上传 API（django-storages + S3/R2）；前端：上传组件 + 裁剪 | P1 | 3h | USER-001 |
 | P1-USER-008 | 通知系统后端 | [B] | NotificationService：send, mark_read, list（Django 服务层） | P1 | 3h | BASE-003 |
