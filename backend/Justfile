@@ -1,0 +1,26 @@
+dev:
+    python manage.py runserver
+
+migrate:
+    python manage.py migrate
+
+makemigrations:
+    python manage.py makemigrations
+
+shell:
+    python manage.py shell_plus
+
+worker:
+    celery -A config worker -l info
+
+beat:
+    celery -A config beat -l info
+
+lint:
+    ruff check .
+
+test:
+    pytest
+
+seed:
+    python manage.py seed

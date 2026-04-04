@@ -1,0 +1,1 @@
+"""Bounties Pydantic schemas."""

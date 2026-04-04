@@ -1,0 +1,1 @@
+"""Workshop Pydantic schemas."""
