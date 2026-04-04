@@ -183,14 +183,14 @@ npx shadcn@latest add button card dialog input select tabs toast badge avatar dr
 
 ### Sprint 1.2：认证系统（第1周后半 ~ 第2周前半）
 
-| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
-|--------|---------|-----|------|--------|------|------|
+| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 | 状态 |
+|--------|---------|-----|------|--------|------|------|------|
 | P1-AUTH-001 | django-allauth + JWT 配置 | [B] | 配置 django-allauth + simplejwt，JWT access/refresh 策略 | P0 | 3h | BASE-003 | ✅ 完成 |
 | P1-AUTH-002 | Email 密码注册/登录 API | [B] | 注册、登录、登出接口，密码哈希（Django 内置） | P0 | 4h | AUTH-001 | ✅ 完成 |
-| P1-AUTH-003 | GitHub OAuth | [B] | 配置 django-allauth GitHub Provider，返回 JWT | P1 | 2h | AUTH-001 |
-| P1-AUTH-004 | Google OAuth | [B] | 配置 django-allauth Google Provider，返回 JWT | P1 | 2h | AUTH-001 |
-| P1-AUTH-005 | 邮箱验证 | [B] | django-allauth 内置邮箱验证流程 + 自定义模板 | P1 | 2h | AUTH-002 |
-| P1-AUTH-006 | 忘记密码/重置密码 | [B] | 重置密码 API + 邮件发送 | P1 | 3h | AUTH-002 |
+| P1-AUTH-003 | GitHub OAuth | [B] | 配置 django-allauth GitHub Provider，返回 JWT | P1 | 2h | AUTH-001 | ❌ 未完成 |
+| P1-AUTH-004 | Google OAuth | [B] | 配置 django-allauth Google Provider，返回 JWT | P1 | 2h | AUTH-001 | ❌ 未完成 |
+| P1-AUTH-005 | 邮箱验证 | [B] | django-allauth 内置邮箱验证流程 + 自定义模板 | P1 | 2h | AUTH-002 | ❌ 未完成 |
+| P1-AUTH-006 | 忘记密码/重置密码 | [B] | 重置密码 API + 邮件发送 | P1 | 3h | AUTH-002 | ❌ 未完成 |
 | P1-AUTH-007 | 登录/注册页面 | [F] | 登录页、注册页 UI（含 OAuth 按钮），对接后端 API | P0 | 4h | AUTH-001, BASE-010 | ✅ 完成 |
 | P1-AUTH-008 | Auth 中间件 | [B+F] | 后端：JWT 权限校验；前端：路由守卫（/profile, /admin 等） | P0 | 3h | AUTH-001, BASE-007 | ✅ 完成 |
 | P1-AUTH-009 | useAuth Hook | [F] | useAuth() hook：JWT 存储/刷新、获取当前用户信息、登出 | P0 | 2h | AUTH-001, BASE-010 | ✅ 完成 |
@@ -199,61 +199,61 @@ npx shadcn@latest add button card dialog input select tabs toast badge avatar dr
 
 ### Sprint 1.3：用户系统与信用分（第2周）
 
-| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
-|--------|---------|-----|------|--------|------|------|
+| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 | 状态 |
+|--------|---------|-----|------|--------|------|------|------|
 | P1-USER-001 | 用户 API Router | [B] | Django Ninja userRouter：get_me, update_profile, get_profile, get_my_stats | P0 | 4h | AUTH-001, BASE-004 | ✅ 完成 |
 | P1-USER-002 | 个人资料设置页 | [F] | 编辑显示名、头像、简介 | P0 | 3h | USER-001, BASE-010 | ✅ 完成 |
-| P1-USER-003 | 公开用户页 | [F] | /u/:username 公开资料页，展示统计数据和贡献 | P1 | 3h | USER-001 |
+| P1-USER-003 | 公开用户页 | [F] | /u/:username 公开资料页，展示统计数据和贡献 | P1 | 3h | USER-001 | ❌ 未完成 |
 | P1-USER-004 | 信用分服务 | [B] | CreditService：add_credit, deduct_credit, calculate_level（Django 服务层） | P0 | 4h | BASE-003 | ✅ 完成 |
 | P1-USER-005 | 信用分 UI 组件 | [F] | CreditBadge（等级徽章）、CreditProgress（进度条）、等级特权展示 | P0 | 3h | USER-004, BASE-010 | ✅ 完成 |
-| P1-USER-006 | 信用分历史页 | [F] | 信用分变动记录列表 | P1 | 2h | USER-004 |
-| P1-USER-007 | 头像上传 | [B+F] | 后端：Django 文件上传 API（django-storages + S3/R2）；前端：上传组件 + 裁剪 | P1 | 3h | USER-001 |
-| P1-USER-008 | 通知系统后端 | [B] | NotificationService：send, mark_read, list（Django 服务层） | P1 | 3h | BASE-003 |
-| P1-USER-009 | 通知系统前端 | [F] | NotificationBell 组件 + 通知列表页 + SSE 实时推送 | P1 | 4h | USER-008, BASE-010 |
+| P1-USER-006 | 信用分历史页 | [F] | 信用分变动记录列表 | P1 | 2h | USER-004 | ❌ 未完成 |
+| P1-USER-007 | 头像上传 | [B+F] | 后端：Django 文件上传 API（django-storages + S3/R2）；前端：上传组件 + 裁剪 | P1 | 3h | USER-001 | ❌ 未完成 |
+| P1-USER-008 | 通知系统后端 | [B] | NotificationService：send, mark_read, list（Django 服务层） | P1 | 3h | BASE-003 | ❌ 未完成 |
+| P1-USER-009 | 通知系统前端 | [F] | NotificationBell 组件 + 通知列表页 + SSE 实时推送 | P1 | 4h | USER-008, BASE-010 | ❌ 未完成 |
 
 ---
 
 ### Sprint 1.4：Skill Marketplace 基础版（第2~3周）
 
-| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
-|--------|---------|-----|------|--------|------|------|
-| P1-SKILL-001 | Skill API Router (CRUD) | [B] | Django Ninja skillRouter：create, update, get_by_id, list, get_my_skills | P0 | 6h | BASE-004, BASE-003 |
-| P1-SKILL-002 | Skill 创建页面 | [F] | 表单页面：名称、描述、Prompt、分类、标签、定价（Phase1 免费优先） | P0 | 5h | SKILL-001, BASE-010 |
-| P1-SKILL-003 | Skill 详情页 | [F] | 完整详情展示 + 试用面板（调用 Skill） | P0 | 6h | SKILL-001 |
-| P1-SKILL-004 | Skill 市场首页 | [F] | 卡片网格列表 + 分类筛选 + 搜索 + 排序 | P0 | 5h | SKILL-001 |
-| P1-SKILL-005 | SkillCard 组件 | [F] | 卡片组件：图标、名称、描述、评分、价格、创作者 | P0 | 2h | BASE-008 |
-| P1-SKILL-006 | Skill 调用逻辑 | [B] | call API：输入 → 执行 → 返回结果（Phase1 免费，无扣费） | P0 | 4h | SKILL-001 |
-| P1-SKILL-007 | Skill 自动审核 | [B] | ModerationService（Python 实现）：安全扫描（jailbreak/injection 检测） | P1 | 4h | SKILL-001 |
-| P1-SKILL-008 | Skill 提交审核流程 | [B] | submit_for_review：DRAFT → PENDING_REVIEW → APPROVED/REJECTED | P0 | 3h | SKILL-007 |
-| P1-SKILL-009 | 我的 Skill 页面 | [F] | 创作者后台：Skill 列表 + 状态管理 + 基础统计 | P1 | 4h | SKILL-001, BASE-010 |
-| P1-SKILL-010 | Meilisearch 搜索集成 | [B] | Skill 数据同步到 Meilisearch，全文搜索 API（自定义集成或 django-meilisearch） | P1 | 4h | SKILL-001, BASE-005 |
+| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 | 状态 |
+|--------|---------|-----|------|--------|------|------|------|
+| P1-SKILL-001 | Skill API Router (CRUD) | [B] | Django Ninja skillRouter：create, update, get_by_id, list, get_my_skills | P0 | 6h | BASE-004, BASE-003 | ❌ 未完成 |
+| P1-SKILL-002 | Skill 创建页面 | [F] | 表单页面：名称、描述、Prompt、分类、标签、定价（Phase1 免费优先） | P0 | 5h | SKILL-001, BASE-010 | ❌ 未完成 |
+| P1-SKILL-003 | Skill 详情页 | [F] | 完整详情展示 + 试用面板（调用 Skill） | P0 | 6h | SKILL-001 | ❌ 未完成 |
+| P1-SKILL-004 | Skill 市场首页 | [F] | 卡片网格列表 + 分类筛选 + 搜索 + 排序 | P0 | 5h | SKILL-001 | ❌ 未完成 |
+| P1-SKILL-005 | SkillCard 组件 | [F] | 卡片组件：图标、名称、描述、评分、价格、创作者 | P0 | 2h | BASE-008 | ❌ 未完成 |
+| P1-SKILL-006 | Skill 调用逻辑 | [B] | call API：输入 → 执行 → 返回结果（Phase1 免费，无扣费） | P0 | 4h | SKILL-001 | ❌ 未完成 |
+| P1-SKILL-007 | Skill 自动审核 | [B] | ModerationService（Python 实现）：安全扫描（jailbreak/injection 检测） | P1 | 4h | SKILL-001 | ❌ 未完成 |
+| P1-SKILL-008 | Skill 提交审核流程 | [B] | submit_for_review：DRAFT → PENDING_REVIEW → APPROVED/REJECTED | P0 | 3h | SKILL-007 | ❌ 未完成 |
+| P1-SKILL-009 | 我的 Skill 页面 | [F] | 创作者后台：Skill 列表 + 状态管理 + 基础统计 | P1 | 4h | SKILL-001, BASE-010 | ❌ 未完成 |
+| P1-SKILL-010 | Meilisearch 搜索集成 | [B] | Skill 数据同步到 Meilisearch，全文搜索 API（自定义集成或 django-meilisearch） | P1 | 4h | SKILL-001, BASE-005 | ❌ 未完成 |
 
 ---
 
 ### Sprint 1.5：Workshop 基础版（第3~4周）
 
-| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
-|--------|---------|-----|------|--------|------|------|
-| P1-WORK-001 | Workshop API Router (CRUD) | [B] | Django Ninja workshopRouter：create, update, publish, delete, list, get_by_id | P0 | 5h | BASE-004, BASE-003 |
-| P1-WORK-002 | Tiptap 富文本编辑器组件 | [F] | 基于 @tiptap/react 的编辑器，内置模板（Problem/Solution/Result），支持 Markdown 输入 | P0 | 6h | BASE-008 |
-| P1-WORK-003 | 文章渲染组件 | [F] | 客户端渲染：代码高亮、表格、图片、Skill 卡片嵌入 | P0 | 4h | BASE-008 |
-| P1-WORK-004 | 写文章页面 | [F] | 文章编辑页：标题、内容、标签、难度、类型、关联 Skill | P0 | 5h | WORK-001, WORK-002, BASE-010 |
-| P1-WORK-005 | 文章详情页 | [F] | 完整文章展示 + 投票 + 评论 + 打赏 + 关联 Skill | P0 | 6h | WORK-001, WORK-003 |
-| P1-WORK-006 | 文章列表页 | [F] | 列表 + 筛选（难度/类型/模型）+ 排序 + 搜索 | P0 | 4h | WORK-001, BASE-010 |
-| P1-WORK-007 | 投票系统 | [B+F] | vote/remove_vote API：权重按信用等级，净票数计算；前端投票组件 | P0 | 3h | WORK-001, USER-004 |
-| P1-WORK-008 | 评论系统 | [B+F] | add_comment API + 一层回复 + 作者置顶 + 投票折叠；前端评论组件 | P1 | 5h | WORK-001 |
-| P1-WORK-009 | 文章搜索（Meilisearch） | [B] | 文章数据同步 + 全文搜索 API | P1 | 3h | SKILL-010 |
+| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 | 状态 |
+|--------|---------|-----|------|--------|------|------|------|
+| P1-WORK-001 | Workshop API Router (CRUD) | [B] | Django Ninja workshopRouter：create, update, publish, delete, list, get_by_id | P0 | 5h | BASE-004, BASE-003 | ❌ 未完成 |
+| P1-WORK-002 | Tiptap 富文本编辑器组件 | [F] | 基于 @tiptap/react 的编辑器，内置模板（Problem/Solution/Result），支持 Markdown 输入 | P0 | 6h | BASE-008 | ❌ 未完成 |
+| P1-WORK-003 | 文章渲染组件 | [F] | 客户端渲染：代码高亮、表格、图片、Skill 卡片嵌入 | P0 | 4h | BASE-008 | ❌ 未完成 |
+| P1-WORK-004 | 写文章页面 | [F] | 文章编辑页：标题、内容、标签、难度、类型、关联 Skill | P0 | 5h | WORK-001, WORK-002, BASE-010 | ❌ 未完成 |
+| P1-WORK-005 | 文章详情页 | [F] | 完整文章展示 + 投票 + 评论 + 打赏 + 关联 Skill | P0 | 6h | WORK-001, WORK-003 | ❌ 未完成 |
+| P1-WORK-006 | 文章列表页 | [F] | 列表 + 筛选（难度/类型/模型）+ 排序 + 搜索 | P0 | 4h | WORK-001, BASE-010 | ❌ 未完成 |
+| P1-WORK-007 | 投票系统 | [B+F] | vote/remove_vote API：权重按信用等级，净票数计算；前端投票组件 | P0 | 3h | WORK-001, USER-004 | ❌ 未完成 |
+| P1-WORK-008 | 评论系统 | [B+F] | add_comment API + 一层回复 + 作者置顶 + 投票折叠；前端评论组件 | P1 | 5h | WORK-001 | ❌ 未完成 |
+| P1-WORK-009 | 文章搜索（Meilisearch） | [B] | 文章数据同步 + 全文搜索 API | P1 | 3h | SKILL-010 | ❌ 未完成 |
 
 ---
 
 ### Sprint 1.6：邀请系统（第4周）
 
-| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
-|--------|---------|-----|------|--------|------|------|
-| P1-INV-001 | 邀请码生成与验证 | [B] | 生成唯一邀请码，注册时绑定邀请关系 | P1 | 3h | AUTH-002 |
-| P1-INV-002 | 邀请奖励发放 | [B] | 注册奖励（即时）+ 首充奖励（延迟）+ 消费奖励（延迟），使用 Celery 异步处理 | P1 | 4h | INV-001, USER-004 |
-| P1-INV-003 | 邀请页面 | [F] | 邀请码展示 + 邀请统计 + 分享链接 | P1 | 3h | INV-001, BASE-010 |
-| P1-INV-004 | 反刷机制 | [B] | IP/设备检测 + 7天活跃校验 + 月度上限 | P2 | 3h | INV-001 |
+| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 | 状态 |
+|--------|---------|-----|------|--------|------|------|------|
+| P1-INV-001 | 邀请码生成与验证 | [B] | 生成唯一邀请码，注册时绑定邀请关系 | P1 | 3h | AUTH-002 | ❌ 未完成 |
+| P1-INV-002 | 邀请奖励发放 | [B] | 注册奖励（即时）+ 首充奖励（延迟）+ 消费奖励（延迟），使用 Celery 异步处理 | P1 | 4h | INV-001, USER-004 | ❌ 未完成 |
+| P1-INV-003 | 邀请页面 | [F] | 邀请码展示 + 邀请统计 + 分享链接 | P1 | 3h | INV-001, BASE-010 | ❌ 未完成 |
+| P1-INV-004 | 反刷机制 | [B] | IP/设备检测 + 7天活跃校验 + 月度上限 | P2 | 3h | INV-001 | ❌ 未完成 |
 
 ---
 
