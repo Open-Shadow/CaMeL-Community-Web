@@ -31,19 +31,19 @@ Module: BASE(基础) / AUTH(认证) / USER(用户) / SKILL(技能市场) / BOUNT
 
 ### Sprint 1.1：项目初始化与基础架构（第1周）
 
-| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 |
-|--------|---------|-----|------|--------|------|------|
-| P1-BASE-001 | 后端项目脚手架 | [B] | Django 项目初始化，创建所有 apps，配置 pyproject.toml + uv | P0 | 3h | - |
-| P1-BASE-002 | 前端项目脚手架 | [F] | Vite + React + TypeScript 项目初始化，配置 Tailwind CSS | P0 | 2h | - |
-| P1-BASE-003 | 数据库模型定义 | [B] | 编写所有 Django apps 的 ORM Models，执行首次迁移 | P0 | 5h | 001 |
-| P1-BASE-004 | Django Ninja API 基础配置 | [B] | 配置 API router、权限类、异常处理中间件、CORS | P0 | 3h | 001 |
-| P1-BASE-005 | Redis 连接配置 | [B] | 配置 django-redis，封装缓存工具函数 | P0 | 1h | 001 |
-| P1-BASE-006 | 环境变量管理 | [B] | 配置 django-environ，创建 .env.example 文件 | P0 | 1h | 001 |
-| P1-BASE-007 | 全局布局组件 | [F] | Header（导航栏）、Footer、MainLayout、MobileNav，配置 React Router v7 | P0 | 4h | 002 |
-| P1-BASE-008 | shadcn/ui 组件安装 | [F] | 安装常用基础组件：Button, Card, Dialog, Input, Select, Tabs, Toast, Badge, Avatar, Dropdown, Skeleton | P0 | 2h | 002 |
-| P1-BASE-009 | 通用共享组件 | [F] | SearchBar, Pagination, TagInput, EmptyState, LoadingSkeleton, ConfirmDialog | P1 | 4h | 008 |
-| P1-BASE-010 | API 客户端生成 | [F] | 基于 Django Ninja 的 OpenAPI Schema，使用 openapi-typescript-codegen 生成类型安全的 API 客户端 | P0 | 3h | 004 |
-| P1-BASE-011 | 工具函数库 | [B+F] | 后端：utils（格式化、常量）；前端：utils.ts + constants.ts（日期、金额格式化、枚举映射） | P1 | 2h | 001, 002 |
+| 任务ID | 任务名称 | 端 | 描述 | 优先级 | 预估 | 依赖 | 状态 |
+|--------|---------|-----|------|--------|------|------|------|
+| P1-BASE-001 | 后端项目脚手架 | [B] | Django 项目初始化，创建所有 apps，配置 pyproject.toml + uv | P0 | 3h | - | ✅ 完成 |
+| P1-BASE-002 | 前端项目脚手架 | [F] | Vite + React + TypeScript 项目初始化，配置 Tailwind CSS | P0 | 2h | - | ✅ 完成 |
+| P1-BASE-003 | 数据库模型定义 | [B] | 编写所有 Django apps 的 ORM Models，执行首次迁移 | P0 | 5h | 001 | ✅ 完成 |
+| P1-BASE-004 | Django Ninja API 基础配置 | [B] | 配置 API router、权限类、异常处理中间件、CORS | P0 | 3h | 001 | ✅ 完成 |
+| P1-BASE-005 | Redis 连接配置 | [B] | 配置 django-redis，封装缓存工具函数 | P0 | 1h | 001 | ✅ 完成 |
+| P1-BASE-006 | 环境变量管理 | [B] | 配置 python-decouple，创建 .env.example 文件 | P0 | 1h | 001 | ✅ 完成 |
+| P1-BASE-007 | 全局布局组件 | [F] | Header（导航栏）、Footer、MainLayout，配置 React Router v7 | P0 | 4h | 002 | ✅ 完成 |
+| P1-BASE-008 | shadcn/ui 组件安装 | [F] | 安装常用基础组件：Button, Card, Dialog, Input, Select, Tabs, Toast, Badge, Avatar, Dropdown, Skeleton | P0 | 2h | 002 | ❌ 未完成 |
+| P1-BASE-009 | 通用共享组件 | [F] | SearchBar, Pagination, TagInput, EmptyState, LoadingSkeleton, ConfirmDialog | P1 | 4h | 008 | 🔶 部分完成（SearchBar + Pagination 已创建，缺 TagInput/EmptyState/LoadingSkeleton/ConfirmDialog） |
+| P1-BASE-010 | API 客户端生成 | [F] | 基于 Django Ninja 的 OpenAPI Schema，使用 openapi-typescript-codegen 生成类型安全的 API 客户端 | P0 | 3h | 004 | ❌ 未完成（需后端运行后执行 pnpm generate-api） |
+| P1-BASE-011 | 工具函数库 | [B+F] | 后端：utils（格式化、常量）；前端：utils.ts + constants.ts（日期、金额格式化、枚举映射） | P1 | 2h | 001, 002 | 🔶 部分完成（前端 utils.ts + constants.ts 已创建，后端 utils 未实现） |
 
 #### P1-BASE-001 详细步骤（后端脚手架）
 

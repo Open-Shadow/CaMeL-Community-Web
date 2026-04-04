@@ -2,7 +2,9 @@
 
 > 本文件为 Claude Code 提供项目上下文，确保跨会话一致性。
 >
-> **工作进度记录**: 参见 [work.md](work.md) 了解已完成的工作和下一步计划。
+> **工作进度记录**:
+> - [work.md](work.md) - 已完成的工作摘要和下一步计划
+> - [docs/07-development-tasks.md](docs/07-development-tasks.md) - 详细任务列表，含完成状态（✅ 完成 / 🔶 部分完成 / ❌ 未完成）
 
 ## 项目概述
 

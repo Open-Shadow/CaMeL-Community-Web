@@ -1,10 +1,28 @@
 # Work Log - Claude Code 工作记录
 
 > 本文件记录 Claude Code 已完成的工作，便于跨会话追踪进度。
+>
+> **详细任务状态**: 参见 [docs/07-development-tasks.md](docs/07-development-tasks.md)，每行任务末尾有完成状态。
 
 ---
 
 ## 2026-04-05: 项目骨架搭建
+
+### P1-BASE 任务完成情况
+
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| P1-BASE-001 | ✅ | Django 项目 + 8个 apps + pyproject.toml |
+| P1-BASE-002 | ✅ | Vite + React + TypeScript + Tailwind |
+| P1-BASE-003 | ✅ | 所有 Models + 迁移文件 |
+| P1-BASE-004 | ✅ | API router + permissions + exceptions + CORS |
+| P1-BASE-005 | ✅ | django-redis 配置 |
+| P1-BASE-006 | ✅ | python-decouple + .env.example |
+| P1-BASE-007 | ✅ | Header + Footer + Layout + React Router v7 |
+| P1-BASE-008 | ❌ | shadcn/ui 未安装 |
+| P1-BASE-009 | 🔶 | SearchBar + Pagination 已创建，缺其他组件 |
+| P1-BASE-010 | ❌ | API 客户端未生成 |
+| P1-BASE-011 | 🔶 | 前端工具函数已创建，后端未实现 |
 
 ### 完成内容
 
