@@ -28,9 +28,23 @@ def login_required(func):
 
 def moderator_required(func):
     """Requires moderator role or above."""
-    return func
+    from functools import wraps
+    @wraps(func)
+    def wrapper(request, *args, **kwargs):
+        user = getattr(request, 'auth', None)
+        if not user or user.role not in ('MODERATOR', 'ADMIN'):
+            raise HttpError(403, "需要版主权限")
+        return func(request, *args, **kwargs)
+    return wrapper
 
 
 def admin_required(func):
     """Requires admin role."""
-    return func
+    from functools import wraps
+    @wraps(func)
+    def wrapper(request, *args, **kwargs):
+        user = getattr(request, 'auth', None)
+        if not user or user.role != 'ADMIN':
+            raise HttpError(403, "需要管理员权限")
+        return func(request, *args, **kwargs)
+    return wrapper

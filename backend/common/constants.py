@@ -58,8 +58,8 @@ class CreditLevelConfig:
         Returns: (level_key, level_name, icon, min_score, max_score)
         """
         for level in cls.LEVELS:
-            _, max_score = level[3], level[4]
-            if max_score is None or score <= max_score:
+            min_score, max_score = level[3], level[4]
+            if score >= min_score and (max_score is None or score <= max_score):
                 return level
         return cls.LEVELS[-1]
 

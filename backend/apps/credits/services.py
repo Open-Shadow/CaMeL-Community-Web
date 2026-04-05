@@ -102,19 +102,19 @@ class CreditService:
 
         return score_after
 
+    # Maps CreditLevel keys to UserLevel enum values
+    LEVEL_MAP = {
+        "sprout": "SEED",
+        "craftsman": "CRAFTSMAN",
+        "expert": "EXPERT",
+        "master": "MASTER",
+        "grandmaster": "GRANDMASTER",
+    }
+
     @classmethod
     def calculate_level(cls, score: int) -> str:
-        """
-        Calculate user level based on credit score.
-
-        Args:
-            score: Credit score
-
-        Returns:
-            Level code (SEED, CRAFTSMAN, EXPERT, MASTER, GRANDMASTER)
-        """
         level = CreditLevelConfig.get_level_by_score(score)
-        return level[0].upper()
+        return cls.LEVEL_MAP.get(level[0], "SEED")
 
     @classmethod
     def get_discount_rate(cls, user: User) -> float:
