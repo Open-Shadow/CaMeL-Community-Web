@@ -6,12 +6,13 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
 export function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, getSocialAuthorizationUrl, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'github' | 'google' | null>(null);
 
   // Redirect if already logged in
   if (isAuthenticated) {
@@ -31,6 +32,18 @@ export function LoginPage() {
       setError(err.response?.data?.message || '登录失败');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSocialLogin = async (provider: 'github' | 'google') => {
+    setError('');
+    setSocialLoading(provider);
+    try {
+      const authorizationUrl = await getSocialAuthorizationUrl(provider);
+      window.location.href = authorizationUrl;
+    } catch (err: any) {
+      setError(err.response?.data?.message || '社交登录暂时不可用');
+      setSocialLoading(null);
     }
   };
 
@@ -78,6 +91,34 @@ export function LoginPage() {
               {isLoading ? '登录中...' : '登录'}
             </Button>
           </form>
+          <div className="mt-4 space-y-3">
+            <div className="text-center text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              或使用社交账号登录
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={socialLoading !== null}
+                onClick={() => handleSocialLogin('github')}
+              >
+                {socialLoading === 'github' ? '跳转中...' : 'GitHub'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={socialLoading !== null}
+                onClick={() => handleSocialLogin('google')}
+              >
+                {socialLoading === 'google' ? '跳转中...' : 'Google'}
+              </Button>
+            </div>
+          </div>
+          <div className="mt-4 text-center text-sm">
+            <Link to="/forgot-password" className="text-primary hover:underline">
+              忘记密码？
+            </Link>
+          </div>
           <div className="mt-4 text-center text-sm">
             还没有账号？{' '}
             <Link to="/register" className="text-primary hover:underline">

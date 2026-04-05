@@ -1,11 +1,15 @@
 """Authentication API routes using django-allauth and JWT."""
-from ninja import Router, Schema
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from ninja import Router, Schema
+from ninja.responses import Status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+from apps.accounts.services import AuthService, InvitationError, InvitationService
 from common.permissions import AuthBearer
 
 User = get_user_model()
@@ -20,6 +24,7 @@ class RegisterInput(Schema):
     email: str
     password: str
     display_name: str = ""
+    invite_code: str | None = None
 
 
 class LoginInput(Schema):
@@ -35,12 +40,14 @@ class TokenOutput(Schema):
 
 class UserOutput(Schema):
     id: int
+    username: str
     email: str
     display_name: str
     avatar_url: str
     role: str
     level: str
     credit_score: int
+    email_verified: bool
 
 
 class MessageOutput(Schema):
@@ -51,18 +58,43 @@ class RefreshInput(Schema):
     refresh: str
 
 
+class VerifyEmailInput(Schema):
+    key: str
+
+
+class ForgotPasswordInput(Schema):
+    email: str
+
+
+class ResetPasswordInput(Schema):
+    uid: str
+    token: str
+    new_password: str
+
+
+class SocialAuthorizeOutput(Schema):
+    provider: str
+    authorization_url: str
+    callback_url: str
+
+
+class SocialExchangeInput(Schema):
+    code: str
+
+
+class InviteValidationOutput(Schema):
+    code: str
+    inviter_display_name: str
+    message: str
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
 
 def get_tokens_for_user(user):
     """Generate JWT tokens for user."""
-    refresh = RefreshToken.for_user(user)
-    return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-        'expires_in': 3600,  # 60 minutes
-    }
+    return AuthService.get_tokens_for_user(user)
 
 
 # =============================================================================
@@ -72,42 +104,72 @@ def get_tokens_for_user(user):
 @router.post("/register", response={201: TokenOutput, 400: MessageOutput})
 def register(request, data: RegisterInput):
     """Register a new user with email and password."""
-    # Check if email exists
-    if User.objects.filter(email=data.email).exists():
-        return 400, {"message": "该邮箱已被注册"}
+    normalized_email = data.email.strip().lower()
+    if User.objects.filter(email__iexact=normalized_email).exists():
+        return Status(400, {"message": "该邮箱已被注册"})
 
     # Validate password
     try:
         validate_password(data.password)
     except ValidationError as e:
-        return 400, {"message": "密码强度不足: " + ", ".join(e.messages)}
+        return Status(400, {"message": "密码强度不足: " + ", ".join(e.messages)})
 
-    # Create user
-    user = User.objects.create_user(
-        username=data.email,  # Use email as username
-        email=data.email,
-        password=data.password,
-        display_name=data.display_name or data.email.split('@')[0],
-    )
+    try:
+        with transaction.atomic():
+            if data.invite_code:
+                InvitationService.validate_code(data.invite_code)
 
-    # Generate tokens
+            user = User.objects.create_user(
+                username=normalized_email,
+                email=normalized_email,
+                password=data.password,
+                display_name=data.display_name or normalized_email.split("@")[0],
+            )
+
+            if data.invite_code:
+                InvitationService.bind_invitation_for_registration(
+                    invitee=user,
+                    code=data.invite_code,
+                    request=request,
+                )
+    except InvitationError as exc:
+        return Status(400, {"message": str(exc)})
+
+    AuthService.send_verification_email(request, user, signup=True)
+
     tokens = get_tokens_for_user(user)
-    return 201, tokens
+    return Status(201, tokens)
+
+
+@router.get("/invite-codes/{code}/validate", response={200: InviteValidationOutput, 404: MessageOutput})
+def validate_invite_code(request, code: str):
+    """Validate an invitation code before registration."""
+    try:
+        invitation = InvitationService.validate_code(code)
+    except InvitationError as exc:
+        return Status(404, {"message": str(exc)})
+
+    inviter_name = invitation.inviter.display_name or invitation.inviter.email.split("@")[0]
+    return Status(200, {
+        "code": invitation.code,
+        "inviter_display_name": inviter_name,
+        "message": f"邀请码可用，邀请人：{inviter_name}",
+    })
 
 
 @router.post("/login", response={200: TokenOutput, 401: MessageOutput})
 def login(request, data: LoginInput):
     """Login with email and password."""
     try:
-        user = User.objects.get(email=data.email)
+        user = User.objects.get(email__iexact=data.email.strip().lower(), is_active=True)
     except User.DoesNotExist:
-        return 401, {"message": "邮箱或密码错误"}
+        return Status(401, {"message": "邮箱或密码错误"})
 
     if not user.check_password(data.password):
-        return 401, {"message": "邮箱或密码错误"}
+        return Status(401, {"message": "邮箱或密码错误"})
 
     tokens = get_tokens_for_user(user)
-    return 200, tokens
+    return Status(200, tokens)
 
 
 @router.post("/refresh", response={200: TokenOutput, 401: MessageOutput})
@@ -115,13 +177,13 @@ def refresh_token(request, data: RefreshInput):
     """Refresh access token using refresh token."""
     try:
         refresh = RefreshToken(data.refresh)
-        return 200, {
+        return Status(200, {
             'refresh': data.refresh,
             'access': str(refresh.access_token),
             'expires_in': 3600,
-        }
+        })
     except TokenError:
-        return 401, {"message": "无效的刷新令牌"}
+        return Status(401, {"message": "无效的刷新令牌"})
 
 
 @router.post("/logout", response={200: MessageOutput})
@@ -130,9 +192,9 @@ def logout(request, data: RefreshInput):
     try:
         refresh = RefreshToken(data.refresh)
         refresh.blacklist()
-        return 200, {"message": "登出成功"}
+        return Status(200, {"message": "登出成功"})
     except TokenError:
-        return 200, {"message": "登出成功"}
+        return Status(200, {"message": "登出成功"})
 
 
 @router.get("/me", response=UserOutput, auth=AuthBearer())
@@ -141,10 +203,59 @@ def get_me(request):
     user = request.auth
     return {
         "id": user.id,
+        "username": user.username,
         "email": user.email,
         "display_name": user.display_name,
         "avatar_url": user.avatar_url,
         "role": user.role,
         "level": user.level,
         "credit_score": user.credit_score,
+        "email_verified": AuthService.is_email_verified(user),
     }
+
+
+@router.post("/verify-email", response={200: MessageOutput, 400: MessageOutput})
+def verify_email(request, data: VerifyEmailInput):
+    try:
+        AuthService.verify_email(request, data.key)
+    except ValidationError as exc:
+        return Status(400, {"message": exc.messages[0]})
+    return Status(200, {"message": "邮箱验证成功"})
+
+
+@router.post("/forgot-password", response=MessageOutput)
+def forgot_password(request, data: ForgotPasswordInput):
+    AuthService.send_password_reset_email(request, data.email.strip().lower())
+    return {"message": "如果该邮箱已注册，我们已发送重置密码邮件"}
+
+
+@router.post("/reset-password", response={200: MessageOutput, 400: MessageOutput})
+def reset_password(request, data: ResetPasswordInput):
+    try:
+        AuthService.reset_password(data.uid, data.token, data.new_password)
+    except ValidationError as exc:
+        return Status(400, {"message": exc.messages[0]})
+    return Status(200, {"message": "密码重置成功"})
+
+
+@router.get("/social/{provider}/authorize", response={200: SocialAuthorizeOutput, 400: MessageOutput})
+def social_authorize(request, provider: str):
+    try:
+        authorization_url = AuthService.build_social_authorization_url(request, provider.lower())
+    except ValidationError as exc:
+        return Status(400, {"message": exc.messages[0]})
+
+    return Status(200, {
+        "provider": provider.lower(),
+        "authorization_url": authorization_url,
+        "callback_url": settings.FRONTEND_SOCIAL_CALLBACK_URL,
+    })
+
+
+@router.post("/social/exchange", response={200: TokenOutput, 400: MessageOutput})
+def social_exchange(request, data: SocialExchangeInput):
+    try:
+        user = AuthService.consume_social_login_code(data.code)
+    except ValidationError as exc:
+        return Status(400, {"message": exc.messages[0]})
+    return Status(200, get_tokens_for_user(user))

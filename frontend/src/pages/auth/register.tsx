@@ -1,25 +1,60 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '@/hooks/use-auth';
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { api, useAuth } from '@/hooks/use-auth';
+import { useEffect, useState } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+
+interface InviteValidationResponse {
+  code: string;
+  inviter_display_name: string;
+  message: string;
+}
 
 export function RegisterPage() {
   const { register, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [inviteCode, setInviteCode] = useState(searchParams.get('invite')?.toUpperCase() || '');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [inviteValid, setInviteValid] = useState<boolean | null>(null);
+  const [isCheckingInvite, setIsCheckingInvite] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect if already logged in
-  if (isAuthenticated) {
-    navigate('/');
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
+
+  const validateInviteCode = async (code: string): Promise<boolean> => {
+    const normalizedCode = code.trim().toUpperCase();
+    if (!normalizedCode) {
+      setInviteMessage('');
+      setInviteValid(null);
+      return false;
+    }
+
+    setIsCheckingInvite(true);
+    try {
+      const response = await api.get<InviteValidationResponse>(`/auth/invite-codes/${normalizedCode}/validate`);
+      setInviteCode(response.data.code);
+      setInviteMessage(response.data.message);
+      setInviteValid(true);
+      return true;
+    } catch (err: any) {
+      setInviteMessage(err.response?.data?.message || '邀请码不可用');
+      setInviteValid(false);
+      return false;
+    } finally {
+      setIsCheckingInvite(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,10 +70,26 @@ export function RegisterPage() {
       return;
     }
 
+    const normalizedInviteCode = inviteCode.trim().toUpperCase();
+    if (normalizedInviteCode) {
+      if (inviteValid === false) {
+        setError('请输入有效的邀请码');
+        return;
+      }
+
+      if (inviteValid === null) {
+        const isValid = await validateInviteCode(normalizedInviteCode);
+        if (!isValid) {
+          setError('请输入有效的邀请码');
+          return;
+        }
+      }
+    }
+
     setIsLoading(true);
 
     try {
-      await register(email, password, displayName || undefined);
+      await register(email, password, displayName || undefined, normalizedInviteCode || undefined);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || '注册失败');
@@ -46,6 +97,10 @@ export function RegisterPage() {
       setIsLoading(false);
     }
   };
+
+  if (isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -85,6 +140,28 @@ export function RegisterPage() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="您的昵称"
               />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="inviteCode" className="text-sm font-medium">
+                邀请码（可选）
+              </label>
+              <Input
+                id="inviteCode"
+                type="text"
+                value={inviteCode}
+                onChange={(e) => {
+                  setInviteCode(e.target.value.toUpperCase());
+                  setInviteValid(null);
+                  setInviteMessage('');
+                }}
+                onBlur={() => void validateInviteCode(inviteCode)}
+                placeholder="输入好友分享的邀请码"
+              />
+              {inviteMessage && (
+                <p className={`text-xs ${inviteValid ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {isCheckingInvite ? '验证邀请码中...' : inviteMessage}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <label htmlFor="password" className="text-sm font-medium">

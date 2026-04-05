@@ -105,3 +105,16 @@ class SkillReview(models.Model):
     class Meta:
         db_table = "skills_skill_review"
         unique_together = ("skill", "reviewer")
+
+
+class SkillUsagePreference(models.Model):
+    skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="usage_preferences")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_usage_preferences")
+    locked_version = models.IntegerField(null=True, blank=True)
+    auto_follow_latest = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "skills_skill_usage_preference"
+        unique_together = ("skill", "user")

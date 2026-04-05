@@ -46,6 +46,9 @@ class Invitation(models.Model):
     )
     used_at = models.DateTimeField(null=True, blank=True)
     first_deposit_rewarded = models.BooleanField(default=False)
+    registration_ip_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    registration_device_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    risk_flags = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

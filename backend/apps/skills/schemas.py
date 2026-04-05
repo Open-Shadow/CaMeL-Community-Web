@@ -33,18 +33,26 @@ class SkillOut(Schema):
     name: str
     slug: str
     description: str
+    system_prompt: str
+    user_prompt_template: str
+    output_format: str
+    example_input: str
+    example_output: str
     category: str
     tags: List[str]
     pricing_model: str
     price_per_use: Optional[float]
     status: str
     is_featured: bool
+    current_version: int
     total_calls: int
     avg_rating: float
     review_count: int
+    rejection_reason: str
     creator_id: int
     creator_name: str
     created_at: str
+    updated_at: str
 
     @staticmethod
     def resolve_creator_name(obj):
@@ -57,6 +65,10 @@ class SkillOut(Schema):
     @staticmethod
     def resolve_created_at(obj):
         return obj.created_at.isoformat()
+
+    @staticmethod
+    def resolve_updated_at(obj):
+        return obj.updated_at.isoformat()
 
 
 class SkillCallInput(Schema):
@@ -91,3 +103,42 @@ class SkillReviewOut(Schema):
     @staticmethod
     def resolve_created_at(obj):
         return obj.created_at.isoformat()
+
+
+class SkillVersionOut(Schema):
+    id: int
+    version: int
+    system_prompt: str
+    user_prompt_template: str
+    change_note: str
+    is_major: bool
+    created_at: str
+
+
+class SkillTrendingOut(Schema):
+    id: int
+    name: str
+    slug: str
+    description: str
+    category: str
+    pricing_model: str
+    price_per_use: Optional[float]
+    total_calls: int
+    avg_rating: float
+    review_count: int
+    creator_name: str
+
+
+class SkillRecommendationOut(SkillTrendingOut):
+    recommendation_reason: str
+
+
+class SkillUsagePreferenceInput(Schema):
+    locked_version: int | None = None
+    auto_follow_latest: bool = True
+
+
+class SkillUsagePreferenceOut(Schema):
+    skill_id: int
+    locked_version: int | None = None
+    auto_follow_latest: bool

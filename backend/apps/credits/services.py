@@ -28,7 +28,14 @@ class CreditService:
 
     @classmethod
     @transaction.atomic
-    def add_credit(cls, user: User, action: str, reference_id: str = "") -> int:
+    def add_credit(
+        cls,
+        user: User,
+        action: str,
+        reference_id: str = "",
+        *,
+        idempotency_key: str | None = None,
+    ) -> int:
         """
         Add credit score to user.
 
@@ -36,6 +43,7 @@ class CreditService:
             user: User instance
             action: CreditAction value
             reference_id: Reference to related object
+            idempotency_key: Stable key to avoid duplicate rewards
 
         Returns:
             New credit score
@@ -44,8 +52,18 @@ class CreditService:
         if amount == 0:
             return user.credit_score
 
+        if idempotency_key:
+            existing_log = CreditLog.objects.filter(
+                user=user,
+                action=action,
+                reference_id=idempotency_key,
+            ).first()
+            if existing_log:
+                return existing_log.score_after
+
         score_before = user.credit_score
         score_after = max(0, score_before + amount)
+        stored_reference = idempotency_key or reference_id
 
         # Update user
         user.credit_score = score_after
@@ -59,7 +77,7 @@ class CreditService:
             amount=amount,
             score_before=score_before,
             score_after=score_after,
-            reference_id=reference_id,
+            reference_id=stored_reference,
         )
 
         return score_after
@@ -91,6 +109,38 @@ class CreditService:
         user.save(update_fields=['credit_score', 'level'])
 
         # Create log
+        CreditLog.objects.create(
+            user=user,
+            action=action,
+            amount=amount,
+            score_before=score_before,
+            score_after=score_after,
+            reference_id=reference_id,
+        )
+
+        return score_after
+
+    @classmethod
+    @transaction.atomic
+    def adjust_credit(
+        cls,
+        user: User,
+        amount: int,
+        reference_id: str = "",
+        *,
+        action: str = CreditAction.ADMIN_ADJUST,
+    ) -> int:
+        """Adjust credit by an arbitrary amount while preserving logs and level updates."""
+        if amount == 0:
+            return user.credit_score
+
+        score_before = user.credit_score
+        score_after = max(0, score_before + amount)
+
+        user.credit_score = score_after
+        user.level = cls.calculate_level(score_after)
+        user.save(update_fields=["credit_score", "level"])
+
         CreditLog.objects.create(
             user=user,
             action=action,
