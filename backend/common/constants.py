@@ -107,6 +107,9 @@ MAX_REVIEW_REVISIONS = 3
 
 # 邀请码
 INVITE_CODE_LENGTH = 8
+INVITE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+INVITE_MONTHLY_CREDIT_CAP = 200
+INVITE_ACTIVITY_WINDOW_DAYS = 7
 
 # =============================================================================
 # 文件上传限制

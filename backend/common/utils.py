@@ -320,6 +320,17 @@ def make_cache_key_from_obj(prefix: str, obj, *attrs: str) -> str:
     return make_cache_key(prefix, *parts)
 
 
+def build_absolute_media_url(request, value: str) -> str:
+    """Build an absolute URL for media or external avatar paths."""
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://")):
+        return value
+    if not request:
+        return value
+    return request.build_absolute_uri(value)
+
+
 # =============================================================================
 # 数值处理
 # =============================================================================

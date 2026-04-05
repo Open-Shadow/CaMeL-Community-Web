@@ -82,6 +82,17 @@ class Comment(models.Model):
         db_table = "workshop_comment"
 
 
+class CommentVote(models.Model):
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name="votes")
+    voter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="comment_votes")
+    value = models.SmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "workshop_comment_vote"
+        unique_together = ("comment", "voter")
+
+
 class Vote(models.Model):
     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="votes")
     voter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="votes")

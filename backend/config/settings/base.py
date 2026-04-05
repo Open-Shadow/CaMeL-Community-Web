@@ -1,3 +1,4 @@
+from celery.schedules import crontab
 from decouple import config, Csv
 from pathlib import Path
 
@@ -19,8 +20,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'allauth',
     'allauth.account',
-    'allauth.mfa',
     'allauth.socialaccount',
+    'allauth.mfa',
     'allauth.socialaccount.providers.github',
     'allauth.socialaccount.providers.google',
     'rest_framework_simplejwt',
@@ -54,7 +55,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -97,6 +98,8 @@ AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
+ACCOUNT_ADAPTER = 'apps.accounts.adapters.AccountAdapter'
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
@@ -114,6 +117,40 @@ CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+CELERY_BEAT_SCHEDULE = {
+    'refresh-skill-trending-cache': {
+        'task': 'apps.skills.tasks.refresh_skill_trending_cache',
+        'schedule': crontab(minute='0', hour='*/1'),
+    },
+    'refresh-skill-recommendation-cache': {
+        'task': 'apps.skills.tasks.refresh_skill_recommendation_cache',
+        'schedule': crontab(minute='15', hour='*/3'),
+    },
+    'refresh-article-recommendation-cache': {
+        'task': 'apps.workshop.tasks.refresh_article_recommendation_cache',
+        'schedule': crontab(minute='30', hour='*/3'),
+    },
+    'detect-outdated-articles': {
+        'task': 'apps.workshop.tasks.detect_outdated_articles',
+        'schedule': crontab(minute='0', hour='4'),
+    },
+    'auto-archive-stale-articles': {
+        'task': 'apps.workshop.tasks.auto_archive_stale_articles',
+        'schedule': crontab(minute='20', hour='4'),
+    },
+    'refresh-series-completion-rewards': {
+        'task': 'apps.workshop.tasks.refresh_series_completion_rewards',
+        'schedule': crontab(minute='40', hour='4'),
+    },
+    'cleanup-workshop-data': {
+        'task': 'apps.workshop.tasks.cleanup_workshop_data',
+        'schedule': crontab(minute='0', hour='5'),
+    },
+    'optimize-search-indexes': {
+        'task': 'apps.search.tasks.optimize_search_indexes',
+        'schedule': crontab(minute='10', hour='5'),
+    },
+}
 
 # JWT
 from datetime import timedelta
@@ -124,6 +161,7 @@ SIMPLE_JWT = {
 
 # CORS
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=Csv())
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
 
 # Meilisearch
 MEILISEARCH_URL = config('MEILISEARCH_URL', default='http://localhost:7700')
@@ -142,14 +180,32 @@ if AWS_STORAGE_BUCKET_NAME:
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
 # Email
-EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_BACKEND = config(
+    'EMAIL_BACKEND',
+    default='django.core.mail.backends.console.EmailBackend',
+)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@camel.community')
+EMAIL_HOST = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@camel.community')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+
+# Frontend URLs
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+FRONTEND_EMAIL_VERIFY_URL = config(
+    'FRONTEND_EMAIL_VERIFY_URL',
+    default=f'{FRONTEND_URL}/verify-email?key={{key}}',
+)
+FRONTEND_PASSWORD_RESET_URL = config(
+    'FRONTEND_PASSWORD_RESET_URL',
+    default=f'{FRONTEND_URL}/reset-password?uid={{uid}}&token={{token}}',
+)
+FRONTEND_SOCIAL_CALLBACK_URL = config(
+    'FRONTEND_SOCIAL_CALLBACK_URL',
+    default=f'{FRONTEND_URL}/auth/social/callback',
+)
 
 # django-allauth
 ACCOUNT_LOGIN_METHODS = {'email'}
@@ -157,25 +213,47 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
+ACCOUNT_EMAIL_CONFIRMATION_HMAC = True
 ACCOUNT_PASSWORD_MIN_LENGTH = 8
+SOCIALACCOUNT_LOGIN_ON_GET = True
+SOCIALACCOUNT_STORE_TOKENS = True
+
+# OAuth
+GITHUB_CLIENT_ID = config('GITHUB_CLIENT_ID', default='')
+GITHUB_CLIENT_SECRET = config('GITHUB_CLIENT_SECRET', default='')
+GOOGLE_CLIENT_ID = config('GOOGLE_CLIENT_ID', default='')
+GOOGLE_CLIENT_SECRET = config('GOOGLE_CLIENT_SECRET', default='')
 
 SOCIALACCOUNT_PROVIDERS = {
     'github': {
-        'APP': {
-            'client_id': config('GITHUB_CLIENT_ID', default=''),
-            'secret': config('GITHUB_CLIENT_SECRET', default=''),
-        },
         'SCOPE': ['user:email'],
     },
     'google': {
-        'APP': {
-            'client_id': config('GOOGLE_CLIENT_ID', default=''),
-            'secret': config('GOOGLE_CLIENT_SECRET', default=''),
-        },
         'SCOPE': ['profile', 'email'],
-        'AUTH_PARAMS': {'access_type': 'online'},
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'OAUTH_PKCE_ENABLED': True,
     },
 }
+
+if GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET:
+    SOCIALACCOUNT_PROVIDERS['github']['APPS'] = [
+        {
+            'client_id': GITHUB_CLIENT_ID,
+            'secret': GITHUB_CLIENT_SECRET,
+            'key': '',
+        }
+    ]
+
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    SOCIALACCOUNT_PROVIDERS['google']['APPS'] = [
+        {
+            'client_id': GOOGLE_CLIENT_ID,
+            'secret': GOOGLE_CLIENT_SECRET,
+            'key': '',
+        }
+    ]
 
 # Stripe
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')

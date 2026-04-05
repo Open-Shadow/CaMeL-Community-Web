@@ -68,3 +68,4 @@ coverage.xml
 *.lock
 !uv.lock
 !pnpm-lock.yaml
+backend/celery.pid

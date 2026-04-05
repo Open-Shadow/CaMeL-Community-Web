@@ -4,29 +4,15 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-
-function OAuthButton({ provider, label }: { provider: string; label: string }) {
-  const handleOAuth = async () => {
-    const res = await axios.get(`${API_BASE}/auth/oauth/${provider}/url`);
-    window.location.href = res.data.url;
-  };
-  return (
-    <Button type="button" variant="outline" className="w-full" onClick={handleOAuth}>
-      {label}
-    </Button>
-  );
-}
 
 export function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, getSocialAuthorizationUrl, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'github' | 'google' | null>(null);
 
   if (isAuthenticated) {
     navigate('/');
@@ -47,6 +33,18 @@ export function LoginPage() {
     }
   };
 
+  const handleSocialLogin = async (provider: 'github' | 'google') => {
+    setError('');
+    setSocialLoading(provider);
+    try {
+      const authorizationUrl = await getSocialAuthorizationUrl(provider);
+      window.location.href = authorizationUrl;
+    } catch (err: any) {
+      setError(err.response?.data?.message || '社交登录暂时不可用');
+      setSocialLoading(null);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
@@ -55,16 +53,6 @@ export function LoginPage() {
           <CardDescription>欢迎回到 CaMeL Community</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            <OAuthButton provider="github" label="GitHub 登录" />
-            <OAuthButton provider="google" label="Google 登录" />
-          </div>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">或使用邮箱</span>
-            </div>
-          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">{error}</div>}
             <div className="space-y-2">
@@ -82,7 +70,30 @@ export function LoginPage() {
               {isLoading ? '登录中...' : '登录'}
             </Button>
           </form>
-          <div className="text-center text-sm">
+          <div className="mt-4 space-y-3">
+            <div className="text-center text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              或使用社交账号登录
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={socialLoading !== null}
+                onClick={() => handleSocialLogin('github')}
+              >
+                {socialLoading === 'github' ? '跳转中...' : 'GitHub'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={socialLoading !== null}
+                onClick={() => handleSocialLogin('google')}
+              >
+                {socialLoading === 'google' ? '跳转中...' : 'Google'}
+              </Button>
+            </div>
+          </div>
+          <div className="mt-4 text-center text-sm">
             还没有账号？{' '}
             <Link to="/register" className="text-primary hover:underline">立即注册</Link>
           </div>

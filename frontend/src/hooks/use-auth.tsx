@@ -6,12 +6,14 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 // Types
 interface User {
   id: number;
+  username: string;
   email: string;
   display_name: string;
   avatar_url: string;
   role: string;
   level: string;
   credit_score: number;
+  email_verified?: boolean;
 }
 
 interface AuthTokens {
@@ -26,9 +28,15 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithTokens: (tokens: AuthTokens) => Promise<void>;
-  register: (email: string, password: string, displayName?: string) => Promise<void>;
+  register: (email: string, password: string, displayName?: string, inviteCode?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
+  refreshUser: () => Promise<User | null>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  resetPassword: (uid: string, token: string, newPassword: string) => Promise<void>;
+  verifyEmail: (key: string) => Promise<void>;
+  getSocialAuthorizationUrl: (provider: 'github' | 'google') => Promise<string>;
+  completeSocialLogin: (code: string) => Promise<void>;
 }
 
 // Create context
@@ -68,19 +76,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const refreshUser = async (): Promise<User | null> => {
+    const response = await api.get('/auth/me');
+    setUser(response.data);
+    return response.data;
+  };
+
   // Check auth on mount
   useEffect(() => {
     const initAuth = async () => {
       const token = getStoredToken();
       if (token) {
         try {
-          const response = await api.get('/auth/me');
-          setUser(response.data);
+          await refreshUser();
         } catch {
           // Token invalid, try refresh
           const refreshed = await refreshToken();
           if (!refreshed) {
             clearStoredTokens();
+          } else {
+            try {
+              await refreshUser();
+            } catch {
+              clearStoredTokens();
+              setUser(null);
+            }
           }
         }
       }
@@ -93,24 +113,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.post('/auth/login', { email, password });
     const tokens: AuthTokens = response.data;
     setStoredTokens(tokens);
-
-    // Fetch user info
-    const userResponse = await api.get('/auth/me');
-    setUser(userResponse.data);
+    await refreshUser();
   };
 
-  const register = async (email: string, password: string, displayName?: string) => {
+  const register = async (email: string, password: string, displayName?: string, inviteCode?: string) => {
     const response = await api.post('/auth/register', {
       email,
       password,
       display_name: displayName,
+      invite_code: inviteCode,
     });
     const tokens: AuthTokens = response.data;
     setStoredTokens(tokens);
-
-    // Fetch user info
-    const userResponse = await api.get('/auth/me');
-    setUser(userResponse.data);
+    await refreshUser();
   };
 
   const loginWithTokens = async (tokens: AuthTokens) => {
@@ -157,6 +172,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         refreshToken,
+        refreshUser,
+        requestPasswordReset: async (email: string) => {
+          await api.post('/auth/forgot-password', { email });
+        },
+        resetPassword: async (uid: string, token: string, newPassword: string) => {
+          await api.post('/auth/reset-password', {
+            uid,
+            token,
+            new_password: newPassword,
+          });
+        },
+        verifyEmail: async (key: string) => {
+          await api.post('/auth/verify-email', { key });
+          if (getStoredToken()) {
+            try {
+              await refreshUser();
+            } catch {
+              // ignore refresh failure
+            }
+          }
+        },
+        getSocialAuthorizationUrl: async (provider: 'github' | 'google') => {
+          const response = await api.get(`/auth/social/${provider}/authorize`);
+          return response.data.authorization_url;
+        },
+        completeSocialLogin: async (code: string) => {
+          const response = await api.post('/auth/social/exchange', { code });
+          const tokens: AuthTokens = response.data;
+          setStoredTokens(tokens);
+          await refreshUser();
+        },
       }}
     >
       {children}

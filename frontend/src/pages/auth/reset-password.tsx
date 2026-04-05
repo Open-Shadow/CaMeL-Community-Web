@@ -1,60 +1,103 @@
-import { useState } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { api } from '@/hooks/use-auth';
+import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+
+import { useAuth } from '@/hooks/use-auth'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
 export function ResetPasswordPage() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const token = searchParams.get('token') || '';
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const { resetPassword } = useAuth()
+  const [searchParams] = useSearchParams()
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+
+  const uid = useMemo(() => searchParams.get('uid') || '', [searchParams])
+  const token = useMemo(() => searchParams.get('token') || '', [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password !== confirm) { setError('两次密码不一致'); return; }
-    setError(''); setIsLoading(true);
-    try {
-      await api.post('/auth/reset-password', { token, new_password: password });
-      navigate('/login');
-    } catch (err: any) {
-      setError(err.response?.data?.message || '重置失败');
-    } finally {
-      setIsLoading(false);
+    e.preventDefault()
+    setError('')
+    setMessage('')
+
+    if (!uid || !token) {
+      setError('重置链接无效或不完整')
+      return
     }
-  };
+
+    if (password.length < 8) {
+      setError('密码至少需要8个字符')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('两次输入的密码不一致')
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      await resetPassword(uid, token, password)
+      setMessage('密码已重置，请使用新密码登录。')
+    } catch (err: any) {
+      setError(err.response?.data?.message || '密码重置失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">重置密码</CardTitle>
-          <CardDescription>请输入新密码</CardDescription>
+          <CardDescription>设置你的新密码</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">{error}</div>}
+            {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-500">{error}</div>}
+            {message && <div className="rounded-md bg-green-50 p-3 text-sm text-green-600">{message}</div>}
             <div className="space-y-2">
-              <label className="text-sm font-medium">新密码</label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="至少 8 位" />
+              <label htmlFor="password" className="text-sm font-medium">
+                新密码
+              </label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="至少8个字符"
+              />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">确认密码</label>
-              <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required placeholder="再次输入密码" />
+              <label htmlFor="confirmPassword" className="text-sm font-medium">
+                确认新密码
+              </label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                placeholder="再次输入新密码"
+              />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading || !token}>
-              {isLoading ? '重置中...' : '重置密码'}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? '提交中...' : '重置密码'}
             </Button>
-            <div className="text-center text-sm">
-              <Link to="/login" className="text-primary hover:underline">返回登录</Link>
-            </div>
           </form>
+          <div className="mt-4 text-center text-sm">
+            <Link to="/login" className="text-primary hover:underline">
+              返回登录
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

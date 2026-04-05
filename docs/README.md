@@ -15,6 +15,7 @@
 | 07 | [开发任务分解](07-development-tasks.md) | 117个任务、4个Phase、详细步骤、依赖关系、关键路径 |
 | 08 | [部署与运维](08-deployment.md) | 部署架构、CI/CD、监控告警、备份、安全、性能优化、上线检查清单 |
 | 09 | [OpenShareHQ 借鉴指南](09-opensharehq-reference.md) | 可借鉴模块、改造建议、不适用部分 |
+| 10 | [合并交接说明](10-merge-handoff.md) | 当前工作区实现范围、验证结果、迁移与合并注意事项 |
 
 ## 快速导航
 

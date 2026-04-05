@@ -114,3 +114,19 @@ class ArbitrationVote(models.Model):
     class Meta:
         db_table = "bounties_arbitration_vote"
         unique_together = ("arbitration", "arbitrator")
+
+
+class BountyReview(models.Model):
+    bounty = models.ForeignKey(Bounty, on_delete=models.CASCADE, related_name="reviews")
+    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounty_reviews_written")
+    reviewee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounty_reviews_received")
+    quality_rating = models.IntegerField()
+    communication_rating = models.IntegerField()
+    responsiveness_rating = models.IntegerField()
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "bounties_bounty_review"
+        unique_together = ("bounty", "reviewer", "reviewee")
