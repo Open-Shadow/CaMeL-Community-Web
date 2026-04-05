@@ -25,6 +25,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithTokens: (tokens: AuthTokens) => Promise<void>;
   register: (email: string, password: string, displayName?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
@@ -112,6 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userResponse.data);
   };
 
+  const loginWithTokens = async (tokens: AuthTokens) => {
+    setStoredTokens(tokens);
+    const userResponse = await api.get('/auth/me');
+    setUser(userResponse.data);
+  };
+
   const logout = async () => {
     const refresh = getStoredRefreshToken();
     if (refresh) {
@@ -146,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         login,
+        loginWithTokens,
         register,
         logout,
         refreshToken,

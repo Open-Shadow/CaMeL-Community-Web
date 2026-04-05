@@ -4,6 +4,21 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+function OAuthButton({ provider, label }: { provider: string; label: string }) {
+  const handleOAuth = async () => {
+    const res = await axios.get(`${API_BASE}/auth/oauth/${provider}/url`);
+    window.location.href = res.data.url;
+  };
+  return (
+    <Button type="button" variant="outline" className="w-full" onClick={handleOAuth}>
+      {label}
+    </Button>
+  );
+}
 
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth();
@@ -13,7 +28,6 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect if already logged in
   if (isAuthenticated) {
     navigate('/');
     return null;
@@ -23,7 +37,6 @@ export function LoginPage() {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
     try {
       await login(email, password);
       navigate('/');
@@ -41,48 +54,37 @@ export function LoginPage() {
           <CardTitle className="text-2xl">登录</CardTitle>
           <CardDescription>欢迎回到 CaMeL Community</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            <OAuthButton provider="github" label="GitHub 登录" />
+            <OAuthButton provider="google" label="Google 登录" />
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">或使用邮箱</span>
+            </div>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">
-                {error}
-              </div>
-            )}
+            {error && <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">{error}</div>}
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
-                邮箱
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="your@email.com"
-              />
+              <label htmlFor="email" className="text-sm font-medium">邮箱</label>
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="your@email.com" />
             </div>
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                密码
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-              />
+              <div className="flex justify-between items-center">
+                <label htmlFor="password" className="text-sm font-medium">密码</label>
+                <Link to="/forgot-password" className="text-xs text-primary hover:underline">忘记密码？</Link>
+              </div>
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? '登录中...' : '登录'}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm">
+          <div className="text-center text-sm">
             还没有账号？{' '}
-            <Link to="/register" className="text-primary hover:underline">
-              立即注册
-            </Link>
+            <Link to="/register" className="text-primary hover:underline">立即注册</Link>
           </div>
         </CardContent>
       </Card>

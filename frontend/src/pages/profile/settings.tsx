@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreditProgress } from '@/components/user/credit-progress';
+import { AvatarUpload } from '@/components/user/avatar-upload';
 import { api } from '@/hooks/use-auth';
 
 interface UserProfile {
@@ -92,22 +92,11 @@ export function ProfileSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Avatar */}
-              <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={profile.avatar_url} />
-                  <AvatarFallback className="text-2xl">
-                    {profile.display_name?.[0]?.toUpperCase() || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <Button variant="outline" size="sm">
-                    更换头像
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    支持 JPG、PNG 格式，最大 5MB
-                  </p>
-                </div>
-              </div>
+              <AvatarUpload
+                currentUrl={profile.avatar_url}
+                displayName={profile.display_name}
+                onSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+              />
 
               {/* Form */}
               <div className="grid gap-4">

@@ -228,6 +228,205 @@ API 客户端生成需要等待 P1-AUTH-001 完成后才有可用的 API endpoin
 
 ---
 
+## 2026-04-05: 认证完善 + 用户功能 (Week 2 后半)
+
+### 完成任务
+
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| P1-AUTH-003 | ✅ | GitHub OAuth（授权 URL 生成 + code 换 JWT） |
+| P1-AUTH-004 | ✅ | Google OAuth（授权 URL 生成 + code 换 JWT） |
+| P1-AUTH-005 | ✅ | 邮箱验证（注册时发送验证邮件，token 存 Redis，3天有效） |
+| P1-AUTH-006 | ✅ | 忘记/重置密码（发送重置邮件，token 存 Redis，1小时有效） |
+| P1-USER-003 | ✅ | 公开用户页 `/u/:username`（头像、等级、信用分、统计数据） |
+| P1-USER-006 | ✅ | 信用分历史页 `/profile/credit-history` |
+| P1-USER-007 | ✅ | 头像上传（后端 S3/R2 + 本地 fallback，前端上传组件含类型/大小校验） |
+
+### 新增文件
+
+#### 后端
+- `apps/accounts/api.py` — 新增端点：
+  - `GET /auth/oauth/{provider}/url` — 获取 OAuth 授权 URL
+  - `POST /auth/oauth/callback` — code 换 JWT
+  - `POST /auth/verify-email` — 邮箱验证
+  - `POST /auth/resend-verification` — 重发验证邮件
+  - `POST /auth/forgot-password` — 发送重置邮件
+  - `POST /auth/reset-password` — 重置密码
+- `apps/accounts/user_api.py` — 新增端点：
+  - `GET /users/by-username/{username}` — 按用户名查公开资料
+  - `GET /users/by-username/{username}/stats` — 按用户名查统计
+  - `POST /users/me/avatar` — 头像上传（S3/R2 + 本地 fallback）
+- `config/settings/base.py` — 新增：OAuth 配置、邮件配置、S3 存储配置
+
+#### 前端
+- `pages/auth/oauth-callback.tsx` — OAuth 回调页
+- `pages/auth/forgot-password.tsx` — 忘记密码页
+- `pages/auth/reset-password.tsx` — 重置密码页
+- `pages/auth/verify-email.tsx` — 邮箱验证页
+- `pages/profile/public-profile.tsx` — 公开用户页 `/u/:username`
+- `pages/profile/credit-history.tsx` — 信用分历史页
+- `components/user/avatar-upload.tsx` — 头像上传组件
+- `hooks/use-auth.tsx` — 新增 `loginWithTokens()` 方法
+- `app/router.tsx` — 注册所有新路由
+
+### 验证状态
+| 检查项 | 状态 |
+|--------|------|
+| Django 系统检查 | ✅ 通过（0 issues） |
+| TypeScript 类型检查 | ✅ 通过 |
+
 *最后更新: 2026-04-05*
 
 
+## 2026-04-05: 通知系统 + 邀请系统 (Week 3)
+
+### 完成任务
+
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| P1-USER-008 | ✅ | 通知系统后端 NotificationService（send, send_bulk, list, mark_read, mark_all_read, unread_count） |
+| P1-USER-009 | ✅ | 通知系统前端（NotificationBell 组件 + 通知列表页 + SSE 实时推送 + useNotifications Hook） |
+| P1-INV-001 | ✅ | 邀请码生成与验证（InvitationService：generate, validate, apply） |
+| P1-INV-002 | ✅ | 邀请奖励发放（Celery tasks：注册奖励 +10 信用分，首充奖励 +$0.50） |
+| P1-INV-003 | ✅ | 邀请页面（邀请码展示 + 统计 + 分享链接 + 邀请记录 + 规则说明） |
+| P1-INV-004 | ✅ | 反刷机制（IP 限频 3次/天 + 月度上限 20 + 自引用检测 + 7天活跃校验） |
+
+### 新增文件
+
+#### 后端
+- `apps/notifications/services.py` — NotificationService 完整实现
+- `apps/notifications/api.py` — 通知 API 端点：
+  - `GET /notifications/` — 通知列表
+  - `GET /notifications/unread-count` — 未读计数
+  - `POST /notifications/{id}/read` — 标记已读
+  - `POST /notifications/read-all` — 全部已读
+  - `GET /notifications/stream` — SSE 实时推送
+- `apps/accounts/services.py` — InvitationService 完整实现
+- `apps/accounts/invitation_api.py` — 邀请 API 端点：
+  - `POST /invitations/generate` — 生成邀请码
+  - `GET /invitations/stats` — 邀请统计
+  - `GET /invitations/list` — 邀请记录
+  - `POST /invitations/validate` — 验证邀请码（公开）
+- `apps/accounts/tasks.py` — Celery 任务：
+  - `grant_invite_register_reward` — 注册即时奖励
+  - `check_first_deposit_reward` — 首充延迟奖励
+- `config/api.py` — 注册 `/invitations/` 路由
+
+#### 前端
+- `hooks/use-notifications.ts` — 通知 Hook（SSE + 状态管理）
+- `components/shared/notification-bell.tsx` — 导航栏通知铃铛组件
+- `pages/notifications/NotificationsPage.tsx` — 通知列表页
+- `pages/profile/invitation.tsx` — 邀请页面
+- `pages/auth/register.tsx` — 注册页增加邀请码输入 + 注册成功后提示验证邮箱
+- `components/layout/Header.tsx` — 导航栏增加认证状态、通知铃铛、邀请入口
+
+### 验证状态
+| 检查项 | 状态 |
+|--------|------|
+| Django 系统检查 | ✅ 通过（0 issues） |
+| TypeScript 类型检查 | ✅ 通过 |
+| 前端构建 | ✅ 通过 |
+
+*最后更新: 2026-04-05*
+
+
+## 2026-04-05: 支付系统 (Week 4-5 / Phase 2)
+
+### 完成任务
+
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| P2-PAY-001 | ✅ | Stripe 集成（stripe Python SDK 配置，Checkout Session 创建） |
+| P2-PAY-002 | ✅ | 充值流程（create_deposit → Stripe Checkout → Webhook → 余额到账 + 邀请首充奖励） |
+| P2-PAY-003 | ✅ | TransactionService（deposit/deduct/credit/freeze/unfreeze/list/income_summary） |
+| P2-PAY-004 | ✅ | 钱包页面（余额/冻结/收入展示 + 快捷充值 + 交易记录） |
+| P2-PAY-005 | ✅ | 导航栏余额组件（BalanceDisplay，点击跳转钱包页） |
+
+### 新增文件
+
+#### 后端
+- `apps/payments/services.py` — TransactionService 完整实现
+- `apps/payments/webhooks.py` — Stripe Webhook 处理（checkout.session.completed）
+- `apps/payments/api.py` — 支付 API 端点：
+  - `POST /payments/deposit` — 创建 Stripe Checkout Session
+  - `GET /payments/balance` — 获取余额
+  - `GET /payments/transactions` — 交易记录列表
+  - `GET /payments/income-summary` — 收入汇总
+- `config/urls.py` — 注册 `/webhooks/stripe/` 路由
+
+#### 前端
+- `pages/wallet/WalletPage.tsx` — 钱包页面（充值 + 交易记录 Tab）
+- `components/shared/balance-display.tsx` — 导航栏余额组件
+- `components/layout/Header.tsx` — 增加余额显示
+
+### 验证状态
+| 检查项 | 状态 |
+|--------|------|
+| Django 系统检查 | ✅ 通过（0 issues） |
+| TypeScript 类型检查 | ✅ 通过 |
+| 前端构建 | ✅ 通过 |
+
+*最后更新: 2026-04-05*
+
+
+## 2026-04-05: 打赏系统 (Sprint 2.4)
+
+### 完成任务
+
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| P2-TIP-001 | ✅ | TipService + 打赏 API 端点（send/list/leaderboard） |
+| P2-TIP-002 | ✅ | TipDialog 组件（快捷金额 + 自定义 + 确认） |
+| P2-TIP-003 | ✅ | 打赏排行榜（Redis 缓存 7天 + 前端页面） |
+| P2-TIP-004 | ✅ | 文章详情页打赏按钮 + 打赏记录展示 |
+
+### 新增文件
+
+#### 后端
+- `apps/workshop/services.py` — TipService（5% 平台手续费，atomic 事务）
+- `apps/workshop/api.py` — 端点：`POST /workshop/articles/{id}/tip`、`GET /workshop/articles/{id}/tips`、`GET /workshop/tips/leaderboard`
+
+#### 前端
+- `components/workshop/tip-dialog.tsx` — 打赏对话框
+- `pages/workshop/ArticleDetailPage.tsx` — 文章详情页（打赏按钮 + 记录）
+- `pages/workshop/TipLeaderboardPage.tsx` — 打赏排行榜页
+- `app/router.tsx` — 注册 `/workshop/tips/leaderboard` 路由
+
+### 验证状态
+| 检查项 | 状态 |
+|--------|------|
+| Django 系统检查 | ✅ 通过（0 issues） |
+| TypeScript 类型检查 | ✅ 通过 |
+
+*最后更新: 2026-04-05*
+
+
+## 2026-04-05: 验收测试 - 邮件系统修复
+
+### 问题排查与修复
+
+#### 问题1: 注册后收不到验证邮件
+**根本原因**: `fail_silently=True` 吞掉 SMTP 错误，任务耗时 134 秒后静默失败。
+**修复**: `apps/accounts/tasks.py` 中 `fail_silently=True` → `fail_silently=False`
+
+#### 问题2: CORS 错误导致注册失败
+**根本原因**: 访问 `127.0.0.1:5173` 但 CORS 只允许 `localhost:5173`。
+**修复**: `.env` 的 `CORS_ALLOWED_ORIGINS` 同时包含两个 origin。
+
+#### 问题3: 注册卡在"注册中..."
+**根本原因**: 同步 `send_mail` 阻塞请求，SMTP 超时导致挂起。
+**修复**: 改为 Celery 异步任务 `send_verification_email.delay()`。
+
+### 注意事项
+- Celery worker 必须运行才能发送邮件（`just infra-only` 已包含）
+- Gmail App Password 必须是 16 位无空格
+
+### 验证状态
+| 检查项 | 状态 |
+|--------|------|
+| 注册流程 | ✅ 通过 |
+| 验证邮件发送 | ✅ 通过 |
+| 邮箱验证链接 | ✅ 通过 |
+| 登录流程 | ✅ 通过 |
+
+*最后更新: 2026-04-05*

@@ -111,17 +111,42 @@ def update_my_profile(request, data: UserProfileUpdateInput):
     }
 
 
-@router.post("/me/avatar", response=UserProfileOutput)
+@router.post("/me/avatar", response={200: UserProfileOutput, 400: MessageOutput})
 def upload_avatar(request, file: UploadedFile = File(...)):
-    """Upload user avatar."""
+    """Upload user avatar to S3/R2 or local storage."""
+    from django.conf import settings
+    import os
+
     user = request.auth
 
-    # TODO: Implement actual file upload to S3/R2
-    # For now, just store a placeholder
-    user.avatar_url = f"/media/avatars/{user.id}_{file.name}"
-    user.save()
+    # Validate file type
+    allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    if file.content_type not in allowed_types:
+        return 400, {"message": "仅支持 JPG、PNG、GIF、WebP 格式"}
 
-    return {
+    # Validate file size (2MB max)
+    if file.size > 2 * 1024 * 1024:
+        return 400, {"message": "文件大小不能超过 2MB"}
+
+    ext = os.path.splitext(file.name)[1].lower() or '.jpg'
+    filename = f"avatars/{user.id}{ext}"
+
+    if settings.AWS_STORAGE_BUCKET_NAME:
+        from storages.backends.s3boto3 import S3Boto3Storage
+        storage = S3Boto3Storage()
+        storage.save(filename, file)
+        domain = settings.AWS_S3_CUSTOM_DOMAIN or f"{settings.AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
+        avatar_url = f"https://{domain}/{filename}"
+    else:
+        # Local fallback
+        from django.core.files.storage import default_storage
+        saved_path = default_storage.save(filename, file)
+        avatar_url = f"{settings.MEDIA_URL}{saved_path}"
+
+    user.avatar_url = avatar_url
+    user.save(update_fields=["avatar_url"])
+
+    return 200, {
         "id": user.id,
         "username": user.username,
         "email": user.email,
@@ -223,7 +248,45 @@ def get_user_stats(request, user_id: int):
     }
 
 
-@router.get("/me/credit-history", response=list[CreditHistoryOutput])
+@router.get("/by-username/{username}", response={200: UserProfileOutput, 404: MessageOutput})
+def get_user_by_username(request, username: str):
+    """Get public profile by username/display_name."""
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return 404, {"message": "用户不存在"}
+
+    return 200, {
+        "id": user.id,
+        "username": user.username,
+        "email": "",  # Hide email
+        "display_name": user.display_name,
+        "bio": user.bio,
+        "avatar_url": user.avatar_url,
+        "role": user.role,
+        "level": user.level,
+        "credit_score": user.credit_score,
+        "balance": 0.0,
+        "created_at": user.created_at.isoformat(),
+    }
+
+
+@router.get("/by-username/{username}/stats", response={200: UserStatsOutput, 404: MessageOutput})
+def get_user_stats_by_username(request, username: str):
+    """Get public stats by username."""
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return 404, {"message": "用户不存在"}
+
+    return 200, {
+        "skills_count": user.skills.count() if hasattr(user, 'skills') else 0,
+        "articles_count": user.articles.count() if hasattr(user, 'articles') else 0,
+        "bounties_posted": user.bounties.count() if hasattr(user, 'bounties') else 0,
+        "bounties_completed": 0,
+        "total_earned": 0.0,
+        "total_spent": 0.0,
+    }
 def get_my_credit_history(request, limit: int = 20, offset: int = 0):
     """Get current user credit score history."""
     user = request.auth

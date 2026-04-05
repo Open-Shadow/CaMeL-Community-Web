@@ -49,3 +49,31 @@ lint:
 # Django Shell
 shell:
     cd backend && uv run python manage.py shell_plus
+
+# 创建超级用户
+superuser:
+    cd backend && uv run python manage.py createsuperuser
+
+# 启动 Celery Worker
+worker:
+    cd backend && uv run celery -A config worker -l info
+
+# 启动 Celery Beat
+beat:
+    cd backend && uv run celery -A config beat -l info
+
+# 仅启动基础设施 + Celery worker（后台）
+infra-only:
+    cd backend && docker compose up -d postgres redis meilisearch
+    cd backend && uv run celery -A config worker -l info --detach --logfile=celery.log --pidfile=celery.pid
+    @echo "✅ 基础设施 + Celery worker 已启动，日志: backend/celery.log"
+
+# 停止 Celery worker
+stop-worker:
+    cd backend && uv run celery -A config control shutdown 2>/dev/null || true
+
+# 删除指定邮箱用户（用法：just delete-user email@example.com）
+delete-user email:
+    cd backend && uv run python manage.py shell -c "from apps.accounts.models import User; u = User.objects.filter(email='{{email}}'); print(f'找到 {u.count()} 个账号'); u.delete(); print('已删除')"
+reset-db:
+    cd backend && docker compose down -v && docker compose up -d postgres redis meilisearch && uv run python manage.py migrate
