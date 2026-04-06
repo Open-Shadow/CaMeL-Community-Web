@@ -50,6 +50,7 @@ export const router = createBrowserRouter([
       { path: 'auth/social/callback', element: <SocialCallbackPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
       { path: 'reset-password', element: <ResetPasswordPage /> },
+      { path: 'reset-password/:uid/:token', element: <ResetPasswordPage /> },
       { path: 'verify-email', element: <VerifyEmailPage /> },
       { path: 'marketplace', element: <MarketplacePage /> },
       { path: 'marketplace/create', element: <CreateSkillPage /> },

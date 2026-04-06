@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 
 export function ResetPasswordPage() {
   const { resetPassword } = useAuth()
+  const routeParams = useParams<{ uid?: string; token?: string }>()
   const [searchParams] = useSearchParams()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -15,8 +16,31 @@ export function ResetPasswordPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const uid = useMemo(() => searchParams.get('uid') || '', [searchParams])
-  const token = useMemo(() => searchParams.get('token') || '', [searchParams])
+  const normalizedSearchParams = useMemo(() => {
+    const rawSearch = window.location.search || ''
+    return new URLSearchParams(rawSearch.replace(/&amp;/gi, '&'))
+  }, [])
+
+  const hashParams = useMemo(() => {
+    const rawHash = window.location.hash?.startsWith('#') ? window.location.hash.slice(1) : window.location.hash || ''
+    return new URLSearchParams(rawHash.replace(/&amp;/gi, '&'))
+  }, [])
+
+  const pickParam = (name: 'uid' | 'token') => {
+    return (
+      routeParams[name] ||
+      searchParams.get(name) ||
+      normalizedSearchParams.get(name) ||
+      searchParams.get(`amp;${name}`) ||
+      normalizedSearchParams.get(`amp;${name}`) ||
+      hashParams.get(name) ||
+      hashParams.get(`amp;${name}`) ||
+      ''
+    )
+  }
+
+  const uid = pickParam('uid')
+  const token = pickParam('token')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

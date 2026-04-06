@@ -191,6 +191,8 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
+AUTH_EMAIL_SEND_ASYNC = config('AUTH_EMAIL_SEND_ASYNC', default=False, cast=bool)
 
 # Frontend URLs
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
@@ -200,7 +202,7 @@ FRONTEND_EMAIL_VERIFY_URL = config(
 )
 FRONTEND_PASSWORD_RESET_URL = config(
     'FRONTEND_PASSWORD_RESET_URL',
-    default=f'{FRONTEND_URL}/reset-password?uid={{uid}}&token={{token}}',
+    default=f'{FRONTEND_URL}/reset-password/{{uid}}/{{token}}',
 )
 FRONTEND_SOCIAL_CALLBACK_URL = config(
     'FRONTEND_SOCIAL_CALLBACK_URL',

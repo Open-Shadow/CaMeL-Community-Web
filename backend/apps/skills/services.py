@@ -227,9 +227,11 @@ class SkillService:
     @transaction.atomic
     def update(cls, skill: Skill, data: dict) -> Skill:
         payload = cls._normalize_and_validate(data, existing=skill)
+        old_system_prompt = skill.system_prompt
+        old_user_prompt_template = skill.user_prompt_template
         prompt_changed = (
-            payload["system_prompt"] != skill.system_prompt
-            or payload["user_prompt_template"] != skill.user_prompt_template
+            payload["system_prompt"] != old_system_prompt
+            or payload["user_prompt_template"] != old_user_prompt_template
         )
         content_changed = any(
             getattr(skill, field) != value
@@ -240,7 +242,7 @@ class SkillService:
             setattr(skill, field, value)
 
         if prompt_changed:
-            combined_before = f"{skill.system_prompt}\n{skill.user_prompt_template}"
+            combined_before = f"{old_system_prompt}\n{old_user_prompt_template}"
             combined_after = f"{payload['system_prompt']}\n{payload['user_prompt_template']}"
             similarity = SequenceMatcher(None, combined_before, combined_after).ratio()
             is_major = similarity < 0.5

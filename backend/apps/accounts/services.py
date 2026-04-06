@@ -1,7 +1,9 @@
 """Accounts business logic."""
 from __future__ import annotations
 
+import logging
 import secrets
+import threading
 from dataclasses import dataclass
 from hashlib import sha256
 from urllib.parse import urlencode
@@ -38,6 +40,13 @@ User = get_user_model()
 SOCIAL_CODE_CACHE_PREFIX = "auth:social:code:"
 SOCIAL_CODE_TTL_SECONDS = 300
 SUPPORTED_SOCIAL_PROVIDERS = {"github", "google"}
+SYNC_EMAIL_BACKENDS = {
+    "django.core.mail.backends.locmem.EmailBackend",
+    "django.core.mail.backends.console.EmailBackend",
+    "django.core.mail.backends.filebased.EmailBackend",
+    "django.core.mail.backends.dummy.EmailBackend",
+}
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -75,8 +84,15 @@ class AuthService:
 
     @classmethod
     def send_verification_email(cls, request, user, *, signup=False):
-        email_address = cls.ensure_email_address(user)
-        email_address.send_confirmation(request=request, signup=signup)
+        if cls._should_send_email_async():
+            threading.Thread(
+                target=cls._send_verification_email_safely,
+                args=(request, user.pk, signup),
+                daemon=True,
+            ).start()
+            return
+
+        cls._send_verification_email_safely(request, user.pk, signup)
 
     @staticmethod
     def verify_email(request, key: str):
@@ -88,20 +104,54 @@ class AuthService:
 
     @staticmethod
     def send_password_reset_email(request, email: str):
+        if AuthService._should_send_email_async():
+            threading.Thread(
+                target=AuthService._send_password_reset_email_safely,
+                args=(request, email),
+                daemon=True,
+            ).start()
+            return
+
+        AuthService._send_password_reset_email_safely(request, email)
+
+    @staticmethod
+    def _send_password_reset_email_safely(request, email: str):
         users = User.objects.filter(email__iexact=email, is_active=True)
         for user in users:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
             password_reset_url = settings.FRONTEND_PASSWORD_RESET_URL.format(uid=uid, token=token)
-            get_adapter(request).send_mail(
-                "account/email/password_reset_key",
-                user.email,
-                {
-                    "user": user,
-                    "password_reset_url": password_reset_url,
-                    "request": request,
-                },
-            )
+            try:
+                get_adapter(request).send_mail(
+                    "account/email/password_reset_key",
+                    user.email,
+                    {
+                        "user": user,
+                        "password_reset_url": password_reset_url,
+                        "request": request,
+                    },
+                )
+            except Exception:  # pragma: no cover - only for runtime SMTP failures
+                logger.exception("Failed to send password reset email", extra={"user_id": user.pk})
+
+    @staticmethod
+    def _send_verification_email_safely(request, user_id: int, signup: bool):
+        try:
+            user = User.objects.get(pk=user_id, is_active=True)
+        except User.DoesNotExist:
+            return
+
+        email_address = AuthService.ensure_email_address(user)
+        try:
+            email_address.send_confirmation(request=request, signup=signup)
+        except Exception:  # pragma: no cover - only for runtime SMTP failures
+            logger.exception("Failed to send verification email", extra={"user_id": user.pk})
+
+    @staticmethod
+    def _should_send_email_async() -> bool:
+        if not getattr(settings, "AUTH_EMAIL_SEND_ASYNC", True):
+            return False
+        return settings.EMAIL_BACKEND not in SYNC_EMAIL_BACKENDS
 
     @staticmethod
     def reset_password(uid: str, token: str, new_password: str):

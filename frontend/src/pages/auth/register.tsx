@@ -89,7 +89,11 @@ export function RegisterPage() {
       });
       setRegistered(true);
     } catch (err: any) {
-      setError(err.response?.data?.message || '注册失败');
+      if (err.code === 'ECONNABORTED') {
+        setError('注册请求超时，请检查后端服务和邮件配置后重试');
+      } else {
+        setError(err.response?.data?.message || '注册失败');
+      }
     } finally {
       setIsLoading(false);
     }

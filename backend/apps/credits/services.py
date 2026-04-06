@@ -309,8 +309,9 @@ class CreditService:
         Freeze lasts until credit is restored above threshold.
         """
         # Set freeze with no expiry — only lifted when credit recovers
-        user.bounty_freeze_until = timezone.datetime.max.replace(
-            tzinfo=timezone.utc
+        import datetime as _dt
+        user.bounty_freeze_until = _dt.datetime.max.replace(
+            tzinfo=_dt.timezone.utc
         )
         user.save(update_fields=["bounty_freeze_until"])
 

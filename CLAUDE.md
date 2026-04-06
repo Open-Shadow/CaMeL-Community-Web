@@ -3,8 +3,34 @@
 > 本文件为 Claude Code 提供项目上下文，确保跨会话一致性。
 >
 > **工作进度记录**:
+> - [docs/00-session-bootstrap.md](docs/00-session-bootstrap.md) - 新会话启动说明（推荐第一个读）
 > - [work.md](work.md) - 已完成的工作摘要和下一步计划
 > - [docs/07-development-tasks.md](docs/07-development-tasks.md) - 详细任务列表，含完成状态（✅ 完成 / 🔶 部分完成 / ❌ 未完成）
+
+## 新会话启动（必须）
+
+每次新对话建议先执行以下流程：
+
+1. 阅读 [docs/00-session-bootstrap.md](docs/00-session-bootstrap.md)
+2. 阅读 [docs/07-development-tasks.md](docs/07-development-tasks.md)
+3. 阅读 [docs/10-merge-handoff.md](docs/10-merge-handoff.md)
+4. 阅读 [work.md](work.md)
+
+快速校验命令（可选但强烈建议）：
+
+```bash
+git status --short
+cd backend && SECRET_KEY=test uv run pytest -q
+cd .. && corepack pnpm -C frontend build
+```
+
+### 当前关键现实（防止误读旧文档）
+
+- 任务总数按 `docs/07` 为 `117`（非旧版本的 105）。
+- API 实际挂载前缀是 `/api/`（不是 `/api/v1/`）。
+- 支付充值前后端接口命名仍有不一致，属于“部分完成”状态。
+- 邀请链路中“7天活跃校验 / 首月消费奖励”尚未完整落地。
+- 管理后台、排行榜、PWA、SEO 仍有未完成项（详见 `docs/07` 的 `❌` 任务）。
 
 ## 项目概述
 
@@ -335,6 +361,8 @@ pnpm dev
 | [07-development-tasks.md](docs/07-development-tasks.md) | 117 个开发任务分解 |
 | [08-deployment.md](docs/08-deployment.md) | 部署、CI/CD、监控 |
 | [09-opensharehq-reference.md](docs/09-opensharehq-reference.md) | OpenShareHQ 借鉴指南 |
+| [10-merge-handoff.md](docs/10-merge-handoff.md) | 合并交接说明与高冲突文件 |
+| [00-session-bootstrap.md](docs/00-session-bootstrap.md) | 新会话启动说明（入口） |
 
 ---
 

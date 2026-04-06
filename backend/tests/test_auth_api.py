@@ -88,15 +88,21 @@ def test_forgot_password_and_reset_password_flow():
     message = mail.outbox[0].body
     uid_match = re.search(r'uid=([^&\s]+)', message)
     token_match = re.search(r'token=([^&\s]+)', message)
-    assert uid_match is not None
-    assert token_match is not None
+    if not uid_match or not token_match:
+        path_match = re.search(r'/reset-password/([^/\s]+)/([^/\s]+)', message)
+        assert path_match is not None
+        uid = path_match.group(1)
+        token = path_match.group(2)
+    else:
+        uid = uid_match.group(1)
+        token = token_match.group(1)
 
     reset_response = client.post(
         '/api/auth/reset-password',
         data=json.dumps(
             {
-                'uid': uid_match.group(1),
-                'token': token_match.group(1),
+                'uid': uid,
+                'token': token,
                 'new_password': 'NewPassword123!',
             }
         ),
