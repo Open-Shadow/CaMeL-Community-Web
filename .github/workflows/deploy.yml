@@ -77,12 +77,12 @@ jobs:
             # Pull latest images
             docker compose pull backend frontend
 
-            # Restart services (zero-downtime for stateless containers)
+            # Restart services — backend entrypoint (start-web.sh) handles migrate + collectstatic
             docker compose up -d --remove-orphans
 
-            # Run migrations inside backend
-            docker compose exec -T backend python manage.py migrate --noinput
-            docker compose exec -T backend python manage.py collectstatic --noinput
+            # Wait for backend to be healthy
+            sleep 10
+            docker compose ps
 
             # Clean up old images
             docker image prune -f
