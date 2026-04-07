@@ -221,6 +221,19 @@ class SearchService:
             return False
 
     @classmethod
+    def remove_skill(cls, skill_id: int) -> bool:
+        client = cls._get_client()
+        if not client:
+            return False
+
+        try:
+            index = client.index(cls.SKILL_INDEX)
+            index.delete_document(skill_id)
+            return True
+        except Exception:
+            return False
+
+    @classmethod
     def _search_skills_db(
         cls,
         q: str | None = None,

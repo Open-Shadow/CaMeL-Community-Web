@@ -9,11 +9,14 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { DetailSkeleton } from '@/components/shared/loading-skeleton'
 import {
   addSkillReview,
+  archiveSkill,
   callSkill,
+  deleteSkill,
   getSkill,
   getSkillUsagePreference,
   listSkillReviews,
   listSkillVersions,
+  restoreSkill,
   type SkillReview,
   type SkillSummary,
   type SkillUsagePreference,
@@ -26,7 +29,7 @@ import { useAuth } from '@/hooks/use-auth'
 export default function SkillDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [skill, setSkill] = useState<SkillSummary | null>(null)
   const [reviews, setReviews] = useState<SkillReview[]>([])
   const [versions, setVersions] = useState<SkillVersion[]>([])
@@ -40,6 +43,7 @@ export default function SkillDetailPage() {
   const [reviewRating, setReviewRating] = useState('5')
   const [reviewComment, setReviewComment] = useState('')
   const [reviewTags, setReviewTags] = useState('')
+  const [managing, setManaging] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -131,6 +135,8 @@ export default function SkillDetailPage() {
     )
   }
 
+  const isOwner = Boolean(isAuthenticated && user && user.id === skill.creator_id)
+
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <Button variant="ghost" className="mb-4" onClick={() => navigate('/marketplace')}>← 返回市场</Button>
@@ -163,6 +169,72 @@ export default function SkillDetailPage() {
           审核未通过原因：{skill.rejection_reason}
         </div>
       )}
+
+      {isOwner ? (
+        <Card className="mb-6">
+          <CardContent className="flex flex-wrap items-center gap-2 p-4">
+            <span className="text-sm text-muted-foreground">创作者管理：</span>
+            {skill.status !== 'ARCHIVED' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={managing}
+                onClick={async () => {
+                  setManaging(true)
+                  try {
+                    setSkill(await archiveSkill(skill.id))
+                    setCallMessage('已下架该 Skill')
+                  } catch (err: any) {
+                    setCallMessage(err?.response?.data?.detail || err?.response?.data?.message || '下架失败')
+                  } finally {
+                    setManaging(false)
+                  }
+                }}
+              >
+                {managing ? '处理中...' : '下架'}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={managing}
+                onClick={async () => {
+                  setManaging(true)
+                  try {
+                    setSkill(await restoreSkill(skill.id))
+                    setCallMessage('已恢复为草稿，可重新提交审核')
+                  } catch (err: any) {
+                    setCallMessage(err?.response?.data?.detail || err?.response?.data?.message || '恢复失败')
+                  } finally {
+                    setManaging(false)
+                  }
+                }}
+              >
+                {managing ? '处理中...' : '恢复为草稿'}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={managing}
+              onClick={async () => {
+                if (!window.confirm(`确认删除 Skill「${skill.name}」吗？删除后无法恢复。`)) return
+                setManaging(true)
+                try {
+                  await deleteSkill(skill.id)
+                  navigate('/marketplace/mine')
+                } catch (err: any) {
+                  setCallMessage(err?.response?.data?.detail || err?.response?.data?.message || '删除失败')
+                } finally {
+                  setManaging(false)
+                }
+              }}
+            >
+              {managing ? '处理中...' : '删除'}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="mb-6">
         <CardContent className="p-4">

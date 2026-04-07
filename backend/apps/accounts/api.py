@@ -12,6 +12,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from apps.accounts.services import AuthService, InvitationError, InvitationService
 from common.permissions import AuthBearer
+from common.utils import build_absolute_media_url
 
 User = get_user_model()
 router = Router(tags=["auth"])
@@ -210,7 +211,7 @@ def get_me(request):
         "username": user.username,
         "email": user.email,
         "display_name": user.display_name,
-        "avatar_url": user.avatar_url,
+        "avatar_url": build_absolute_media_url(request, user.avatar_url),
         "role": user.role,
         "level": user.level,
         "credit_score": user.credit_score,

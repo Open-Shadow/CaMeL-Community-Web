@@ -115,7 +115,7 @@ export interface ArticlePayload {
 }
 
 export async function listArticles(params: ArticleListParams = {}) {
-  const response = await api.get<ArticleSummary[]>('/workshop', { params })
+  const response = await api.get<ArticleSummary[]>('/workshop/', { params })
   return response.data
 }
 
@@ -154,7 +154,7 @@ export async function listRelatedArticles(articleId: number, limit = 4) {
 }
 
 export async function createArticle(payload: ArticlePayload) {
-  const response = await api.post<ArticleDetail>('/workshop', payload)
+  const response = await api.post<ArticleDetail>('/workshop/', payload)
   return response.data
 }
 

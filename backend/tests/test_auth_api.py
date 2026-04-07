@@ -155,3 +155,20 @@ def test_social_exchange_returns_jwt_tokens():
     payload = response.json()
     assert 'access' in payload
     assert 'refresh' in payload
+
+
+def test_auth_me_returns_absolute_avatar_url():
+    user = User.objects.create_user(
+        username='avatar-me@example.com',
+        email='avatar-me@example.com',
+        password='StrongPass123!',
+        display_name='Avatar Me',
+        avatar_url='/media/avatars/1/test.png',
+    )
+    token = AuthService.get_tokens_for_user(user)['access']
+    client = Client()
+
+    response = client.get('/api/auth/me', HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    assert response.status_code == 200
+    assert response.json()['avatar_url'].startswith('http://testserver/media/avatars/')

@@ -99,7 +99,7 @@ export interface BountyListResponse {
 }
 
 export async function listBounties(params: Record<string, string | number | undefined> = {}) {
-  const response = await api.get<BountyListResponse>('/bounties', { params })
+  const response = await api.get<BountyListResponse>('/bounties/', { params })
   return response.data
 }
 
@@ -120,7 +120,7 @@ export async function createBounty(payload: {
   reward: number
   deadline: string
 }) {
-  const response = await api.post<BountyDetail>('/bounties', payload)
+  const response = await api.post<BountyDetail>('/bounties/', payload)
   return response.data
 }
 

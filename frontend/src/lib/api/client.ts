@@ -295,10 +295,8 @@ export const usersApi = {
     api.patch<UserProfile>('/users/me', data),
   uploadAvatar: (file: File) => {
     const formData = new FormData();
-    formData.append('avatar', file);
-    return api.post<{ avatar_url: string }>('/users/me/avatar', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    formData.append('file', file);
+    return api.post<{ avatar_url: string }>('/users/me/avatar', formData);
   },
   getPublicProfile: (username: string) =>
     api.get<UserProfile>(`/users/by-username/${username}`),

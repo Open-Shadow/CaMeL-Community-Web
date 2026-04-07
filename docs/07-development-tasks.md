@@ -38,7 +38,7 @@ Module: BASE(基础) / AUTH(认证) / USER(用户) / SKILL(技能市场) / BOUNT
 
 | 任务ID        | 任务名称                  | 端     | 描述                                                                                           | 优先级 | 预估  | 依赖       | 状态                               | 负责人 |
 | ----------- | --------------------- | ----- | -------------------------------------------------------------------------------------------- | --- | --- | -------- | -------------------------------- | --- |
-| P1-BASE-001 | 后端项目脚手架               | [B]   | Django 项目初始化，创建所有 apps，配置 pyproject.toml + uv                                                | P0  | 3h  | -        | ✅ 完成 | A   |
+| P1-BASE-001 | 后端项目脚手架               | [B]   | Django 项目初始化，创建所有 apps，配置 pyproject.toml + uv                                                | P0  | 3h  | -        | ✅ 完成（根 Justfile 已补充 just up / just down / just status） | A   |
 | P1-BASE-002 | 前端项目脚手架               | [F]   | Vite + React + TypeScript 项目初始化，配置 Tailwind CSS                                              | P0  | 2h  | -        | ✅ 完成 | A   |
 | P1-BASE-003 | 数据库模型定义               | [B]   | 编写所有 Django apps 的 ORM Models，执行首次迁移                                                         | P0  | 5h  | 001      | ✅ 完成 | A   |
 | P1-BASE-004 | Django Ninja API 基础配置 | [B]   | 配置 API router、权限类、异常处理中间件、CORS                                                               | P0  | 3h  | 001      | ✅ 完成 | A   |

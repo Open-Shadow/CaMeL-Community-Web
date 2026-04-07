@@ -288,11 +288,19 @@ def update_my_profile(request, data: UserProfileUpdateInput):
 
 
 @router.post("/me/avatar", response={200: UserProfileOutput, 400: MessageOutput})
-def upload_avatar(request, file: UploadedFile = File(...)):
+def upload_avatar(
+    request,
+    file: UploadedFile | None = File(None),
+    avatar: UploadedFile | None = File(None),
+):
     user = request.auth
-    extension = validate_avatar_file(file)
+    uploaded_file = file or avatar
+    if uploaded_file is None:
+        raise HttpError(400, "请上传头像文件")
+
+    extension = validate_avatar_file(uploaded_file)
     avatar_path = f"avatars/{user.id}/{uuid4().hex}.{extension}"
-    stored_name = default_storage.save(avatar_path, file)
+    stored_name = default_storage.save(avatar_path, uploaded_file)
     user.avatar_url = default_storage.url(stored_name)
     user.save(update_fields=["avatar_url", "updated_at"])
     return serialize_private_user(request, user)

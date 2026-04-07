@@ -162,6 +162,15 @@ SIMPLE_JWT = {
 # CORS
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=Csv())
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
+debug_value = str(config('DEBUG', default='false')).strip().lower()
+is_debug_env = debug_value in {'1', 'true', 'yes', 'on', 'debug', 'dev', 'development', 'local'}
+if is_debug_env:
+    # In local dev, frontend port may drift (e.g. 5173 -> 5174). Keep same-origin rules
+    # for production, but allow localhost loopback ports to prevent false CORS failures.
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://localhost:\d+$",
+        r"^http://127\.0\.0\.1:\d+$",
+    ]
 
 # Meilisearch
 MEILISEARCH_URL = config('MEILISEARCH_URL', default='http://localhost:7700')

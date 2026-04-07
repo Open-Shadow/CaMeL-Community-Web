@@ -54,22 +54,6 @@ class SkillOut(Schema):
     created_at: str
     updated_at: str
 
-    @staticmethod
-    def resolve_creator_name(obj):
-        return obj.creator.display_name or obj.creator.username
-
-    @staticmethod
-    def resolve_avg_rating(obj):
-        return float(obj.avg_rating)
-
-    @staticmethod
-    def resolve_created_at(obj):
-        return obj.created_at.isoformat()
-
-    @staticmethod
-    def resolve_updated_at(obj):
-        return obj.updated_at.isoformat()
-
 
 class SkillCallInput(Schema):
     input_text: str
@@ -95,14 +79,6 @@ class SkillReviewOut(Schema):
     reviewer_id: int
     reviewer_name: str
     created_at: str
-
-    @staticmethod
-    def resolve_reviewer_name(obj):
-        return obj.reviewer.display_name or obj.reviewer.username
-
-    @staticmethod
-    def resolve_created_at(obj):
-        return obj.created_at.isoformat()
 
 
 class SkillVersionOut(Schema):
@@ -142,3 +118,7 @@ class SkillUsagePreferenceOut(Schema):
     skill_id: int
     locked_version: int | None = None
     auto_follow_latest: bool
+
+
+class MessageOut(Schema):
+    message: str

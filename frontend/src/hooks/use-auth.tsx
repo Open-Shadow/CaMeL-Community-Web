@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '@/lib/env';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 15000);
 
 // Types
@@ -70,6 +70,15 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Let browser set multipart boundary automatically for FormData.
+  if (config.data instanceof FormData && config.headers) {
+    const headers = config.headers as any;
+    if (typeof headers.delete === 'function') {
+      headers.delete('Content-Type');
+    } else {
+      delete headers['Content-Type'];
+    }
+  }
   return config;
 });
 
@@ -77,12 +86,77 @@ api.interceptors.request.use((config) => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const refreshPromiseRef = useRef<Promise<boolean> | null>(null);
 
   const refreshUser = async (): Promise<User | null> => {
     const response = await api.get('/auth/me');
     setUser(response.data);
     return response.data;
   };
+
+  const refreshToken = async (): Promise<boolean> => {
+    const refresh = getStoredRefreshToken();
+    if (!refresh) return false;
+
+    try {
+      const response = await api.post('/auth/refresh', { refresh });
+      const tokens: AuthTokens = response.data;
+      setStoredTokens(tokens);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    const interceptorId = api.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const status = error?.response?.status;
+        const originalRequest = error?.config as any;
+        const url = String(originalRequest?.url || '');
+
+        // Avoid infinite loops and skip auth endpoints themselves.
+        if (
+          status !== 401 ||
+          !originalRequest ||
+          originalRequest._retry ||
+          url.includes('/auth/login') ||
+          url.includes('/auth/register') ||
+          url.includes('/auth/refresh')
+        ) {
+          throw error;
+        }
+
+        originalRequest._retry = true;
+
+        if (!refreshPromiseRef.current) {
+          refreshPromiseRef.current = refreshToken().finally(() => {
+            refreshPromiseRef.current = null;
+          });
+        }
+
+        const refreshed = await refreshPromiseRef.current;
+        if (!refreshed) {
+          clearStoredTokens();
+          setUser(null);
+          throw error;
+        }
+
+        const token = getStoredToken();
+        if (token) {
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+        }
+
+        return api.request(originalRequest);
+      },
+    );
+
+    return () => {
+      api.interceptors.response.eject(interceptorId);
+    };
+  }, []);
 
   // Check auth on mount
   useEffect(() => {
@@ -147,20 +221,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     clearStoredTokens();
     setUser(null);
-  };
-
-  const refreshToken = async (): Promise<boolean> => {
-    const refresh = getStoredRefreshToken();
-    if (!refresh) return false;
-
-    try {
-      const response = await api.post('/auth/refresh', { refresh });
-      const tokens: AuthTokens = response.data;
-      setStoredTokens(tokens);
-      return true;
-    } catch {
-      return false;
-    }
   };
 
   return (

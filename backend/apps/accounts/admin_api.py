@@ -13,6 +13,7 @@ from apps.skills.models import Skill
 from apps.workshop.models import Article
 from apps.bounties.models import Bounty
 from apps.credits.models import CreditLog
+from common.utils import build_absolute_media_url
 
 
 router = Router(tags=["admin"], auth=AuthBearer())
@@ -221,7 +222,7 @@ def get_user_detail(request, user_id: int):
         "email": u.email,
         "display_name": u.display_name,
         "bio": u.bio,
-        "avatar_url": u.avatar_url,
+        "avatar_url": build_absolute_media_url(request, u.avatar_url),
         "role": u.role,
         "level": u.level,
         "credit_score": u.credit_score,

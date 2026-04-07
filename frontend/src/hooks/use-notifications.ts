@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/hooks/use-auth';
+import { API_BASE_URL } from '@/lib/env';
 
 interface Notification {
   id: number;
@@ -10,8 +11,6 @@ interface Notification {
   is_read: boolean;
   created_at: string;
 }
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -54,7 +53,7 @@ export function useNotifications() {
     fetchUnreadCount();
     setIsLoading(false);
 
-    const es = new EventSource(`${API_BASE}/notifications/stream?token=${token}`);
+    const es = new EventSource(`${API_BASE_URL}/notifications/stream?token=${token}`);
     eventSourceRef.current = es;
 
     es.onmessage = (event) => {

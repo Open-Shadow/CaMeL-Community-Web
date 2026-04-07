@@ -24,7 +24,7 @@ interface UserProfile {
 }
 
 export function ProfileSettingsPage() {
-  useAuth(); // ensure user is authenticated
+  const { refreshUser } = useAuth(); // ensure user is authenticated and sync header state
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,6 +60,7 @@ export function ProfileSettingsPage() {
         display_name: displayName,
         bio: bio,
       });
+      await refreshUser();
       setMessage('保存成功');
       fetchProfile();
     } catch (error: any) {
@@ -95,7 +96,10 @@ export function ProfileSettingsPage() {
               <AvatarUpload
                 currentUrl={profile.avatar_url}
                 displayName={profile.display_name}
-                onSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+                onSuccess={(url) => {
+                  setProfile({ ...profile, avatar_url: url });
+                  void refreshUser();
+                }}
               />
 
               {/* Form */}

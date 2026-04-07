@@ -36,12 +36,16 @@ export function AvatarUpload({ currentUrl, displayName, onSuccess }: AvatarUploa
     formData.append('file', file);
 
     try {
-      const res = await api.post('/users/me/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post('/users/me/avatar', formData);
       onSuccess?.(res.data.avatar_url);
     } catch (err: any) {
-      setError(err.response?.data?.message || '上传失败');
+      const detail = err.response?.data?.detail;
+      const detailText = Array.isArray(detail)
+        ? detail.map((d: any) => d?.msg).filter(Boolean).join('；')
+        : typeof detail === 'string'
+          ? detail
+          : '';
+      setError(err.response?.data?.message || detailText || '上传失败');
       setPreview(currentUrl || '');
     } finally {
       setIsLoading(false);

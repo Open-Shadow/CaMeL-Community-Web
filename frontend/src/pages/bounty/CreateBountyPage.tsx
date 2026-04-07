@@ -4,9 +4,11 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { createBounty } from '@/lib/bounties'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function CreateBountyPage() {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -20,20 +22,52 @@ export default function CreateBountyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title || !form.reward) return
+    if (!isAuthenticated) {
+      setMessage('请先登录后再发布悬赏')
+      return
+    }
+
+    const title = form.title.trim()
+    const reward = Number(form.reward)
+    if (!title) {
+      setMessage('请填写悬赏标题')
+      return
+    }
+    if (!Number.isFinite(reward) || reward < 1) {
+      setMessage('赏金金额需不低于 $1.00')
+      return
+    }
+    if (!form.deadline) {
+      setMessage('请选择截止日期')
+      return
+    }
+
+    const deadlineDate = new Date(`${form.deadline}T23:59:59`)
+    if (Number.isNaN(deadlineDate.getTime())) {
+      setMessage('截止日期格式无效')
+      return
+    }
+
     setSubmitting(true)
     setMessage('')
     try {
       const bounty = await createBounty({
-        title: form.title,
+        title,
         description: form.description,
         bounty_type: form.type,
-        reward: Number(form.reward),
-        deadline: new Date(form.deadline).toISOString(),
+        reward,
+        deadline: deadlineDate.toISOString(),
       })
       navigate(`/bounty/${bounty.id}`)
     } catch (error: any) {
-      setMessage(error.response?.data?.message || '发布失败')
+      const data = error?.response?.data
+      const detailText =
+        (typeof data?.message === 'string' && data.message) ||
+        (typeof data?.detail === 'string' && data.detail) ||
+        (Array.isArray(data?.detail) && data.detail[0]?.msg) ||
+        ''
+      const status = error?.response?.status
+      setMessage(detailText || (status ? `发布失败（HTTP ${status}）` : '发布失败（网络异常）'))
       setSubmitting(false)
     }
   }
@@ -69,8 +103,8 @@ export default function CreateBountyPage() {
             onChange={e => set('reward', e.target.value)} placeholder="最低 $1.00" required />
         </div>
         <div>
-          <label className="text-sm font-medium mb-1 block">截止日期</label>
-          <Input type="date" value={form.deadline} onChange={e => set('deadline', e.target.value)} />
+          <label className="text-sm font-medium mb-1 block">截止日期 *</label>
+          <Input type="date" value={form.deadline} onChange={e => set('deadline', e.target.value)} required />
         </div>
         {message ? <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{message}</div> : null}
         <Button type="submit" disabled={submitting} className="w-full">

@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+import json
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -216,3 +217,33 @@ def test_phase4_api_endpoints_expose_recommendations_and_series():
     assert series_response.json()[0]["title"] == "API Series"
     assert detail_response.status_code == 200
     assert len(detail_response.json()["articles"]) == 3
+
+
+def test_workshop_create_draft_api_endpoint_works():
+    user = create_user("draft-author@example.com")
+    client = auth_client(user)
+
+    payload = {
+        "title": "Draft From API",
+        "content": "这是一个草稿内容",
+        "difficulty": "BEGINNER",
+        "article_type": "TUTORIAL",
+        "model_tags": ["Claude Code"],
+        "custom_tags": ["mcp"],
+    }
+
+    response = client.post(
+        "/api/workshop/",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == payload["title"]
+    assert body["status"] == ArticleStatus.DRAFT
+    assert Article.objects.filter(
+        id=body["id"],
+        author=user,
+        status=ArticleStatus.DRAFT,
+    ).exists()

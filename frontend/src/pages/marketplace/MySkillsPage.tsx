@@ -8,7 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api, useAuth } from '@/hooks/use-auth'
 import { formatCurrency } from '@/lib/utils'
-import { getSkillIncomeDashboard, type SkillIncomeDashboard, type SkillSummary } from '@/lib/skills'
+import {
+  archiveSkill,
+  deleteSkill,
+  getSkillIncomeDashboard,
+  restoreSkill,
+  type SkillIncomeDashboard,
+  type SkillSummary,
+} from '@/lib/skills'
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: '草稿',
@@ -26,6 +33,7 @@ export default function MySkillsPage() {
   const [error, setError] = useState('')
   const [status, setStatus] = useState<string>('ALL')
   const [income, setIncome] = useState<SkillIncomeDashboard | null>(null)
+  const [actioningId, setActioningId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -67,6 +75,55 @@ export default function MySkillsPage() {
 
   const filteredSkills =
     status === 'ALL' ? skills : skills.filter((skill) => skill.status === status)
+
+  const refreshIncome = async () => {
+    setIncome(await getSkillIncomeDashboard().catch(() => null))
+  }
+
+  const handleArchive = async (skillId: number) => {
+    setError('')
+    setActioningId(skillId)
+    try {
+      const updated = await archiveSkill(skillId)
+      setSkills((current) => current.map((item) => (item.id === skillId ? updated : item)))
+      await refreshIncome()
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.response?.data?.message || 'Skill 下架失败')
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  const handleRestore = async (skillId: number) => {
+    setError('')
+    setActioningId(skillId)
+    try {
+      const updated = await restoreSkill(skillId)
+      setSkills((current) => current.map((item) => (item.id === skillId ? updated : item)))
+      await refreshIncome()
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.response?.data?.message || 'Skill 恢复失败')
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  const handleDelete = async (skill: SkillSummary) => {
+    const confirmed = window.confirm(`确认删除 Skill「${skill.name}」吗？删除后无法恢复。`)
+    if (!confirmed) return
+
+    setError('')
+    setActioningId(skill.id)
+    try {
+      await deleteSkill(skill.id)
+      setSkills((current) => current.filter((item) => item.id !== skill.id))
+      await refreshIncome()
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.response?.data?.message || 'Skill 删除失败')
+    } finally {
+      setActioningId(null)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -162,6 +219,35 @@ export default function MySkillsPage() {
                       审核状态稳定，可继续编辑后重新提交。
                     </p>
                   )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {skill.status !== 'ARCHIVED' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={actioningId === skill.id}
+                        onClick={() => handleArchive(skill.id)}
+                      >
+                        {actioningId === skill.id ? '处理中...' : '下架'}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={actioningId === skill.id}
+                        onClick={() => handleRestore(skill.id)}
+                      >
+                        {actioningId === skill.id ? '处理中...' : '恢复为草稿'}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={actioningId === skill.id}
+                      onClick={() => handleDelete(skill)}
+                    >
+                      {actioningId === skill.id ? '处理中...' : '删除'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}

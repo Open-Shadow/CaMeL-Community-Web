@@ -37,6 +37,7 @@ from apps.workshop.schemas import (
 )
 from apps.workshop.services import ArticleService, SeriesService, TipService
 from common.permissions import AuthBearer, login_required
+from common.utils import build_absolute_media_url
 
 router = Router(tags=["workshop"])
 User = get_user_model()
@@ -252,7 +253,9 @@ def get_article_tips(request, article_id: int, limit: int = 20):
             tipper=TipperOut(
                 id=t.tipper.id,
                 display_name=t.tipper.display_name or t.tipper.email,
-                avatar_url=getattr(t.tipper, "avatar_url", "") or "",
+                avatar_url=build_absolute_media_url(
+                    request, getattr(t.tipper, "avatar_url", "") or ""
+                ),
             ),
             amount=float(t.amount),
             created_at=t.created_at.isoformat(),
@@ -263,7 +266,13 @@ def get_article_tips(request, article_id: int, limit: int = 20):
 
 @router.get("/tips/leaderboard", response=list[LeaderboardEntry])
 def get_leaderboard(request, limit: int = 20):
-    return TipService.get_leaderboard(limit)
+    return [
+        {
+            **entry,
+            "avatar_url": build_absolute_media_url(request, entry.get("avatar_url", "")),
+        }
+        for entry in TipService.get_leaderboard(limit)
+    ]
 
 
 # ─── Article endpoints (from feat-b) ──────────────────────────────────────────

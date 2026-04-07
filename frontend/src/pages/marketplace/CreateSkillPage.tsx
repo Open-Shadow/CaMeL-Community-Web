@@ -77,7 +77,12 @@ export default function CreateSkillPage() {
       const submitted = await submitSkill(created.id)
       navigate(`/marketplace/${submitted.id}`)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Skill 创建失败')
+      const message =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Skill 创建失败'
+      setError(message)
     } finally {
       setSubmitting(false)
     }

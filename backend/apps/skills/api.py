@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from ninja import Router
 from ninja.errors import HttpError
+from ninja.responses import Status
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
@@ -14,6 +15,7 @@ from apps.skills.schemas import (
     SkillTrendingOut, SkillVersionOut,
     SkillRecommendationOut,
     SkillUsagePreferenceInput, SkillUsagePreferenceOut,
+    MessageOut,
 )
 from apps.skills.services import SkillService
 
@@ -55,7 +57,7 @@ def create_skill(request, data: SkillCreateInput):
         skill = SkillService.create(request.auth, data.dict())
     except ValueError as e:
         raise HttpError(400, str(e))
-    return 201, _skill_out(skill)
+    return Status(201, _skill_out(skill))
 
 
 @router.get("", response=List[SkillOut])
@@ -159,6 +161,33 @@ def submit_skill(request, skill_id: int):
     return _skill_out(skill)
 
 
+@router.post("/{skill_id}/archive", response=SkillOut, auth=AuthBearer())
+def archive_skill(request, skill_id: int):
+    skill = get_object_or_404(Skill, id=skill_id, creator=request.auth)
+    try:
+        skill = SkillService.archive(skill)
+    except ValueError as exc:
+        raise HttpError(400, str(exc))
+    return _skill_out(skill)
+
+
+@router.post("/{skill_id}/restore", response=SkillOut, auth=AuthBearer())
+def restore_skill(request, skill_id: int):
+    skill = get_object_or_404(Skill, id=skill_id, creator=request.auth)
+    try:
+        skill = SkillService.restore(skill)
+    except ValueError as exc:
+        raise HttpError(400, str(exc))
+    return _skill_out(skill)
+
+
+@router.delete("/{skill_id}", response=MessageOut, auth=AuthBearer())
+def delete_skill(request, skill_id: int):
+    skill = get_object_or_404(Skill, id=skill_id, creator=request.auth)
+    SkillService.delete(skill)
+    return {"message": "Skill 已删除"}
+
+
 @router.post("/{skill_id}/call", response=SkillCallOut, auth=AuthBearer())
 def call_skill(request, skill_id: int, data: SkillCallInput):
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
@@ -176,12 +205,12 @@ def add_review(request, skill_id: int, data: SkillReviewInput):
         review = SkillService.add_review(skill, request.auth, data.rating, data.comment, data.tags)
     except ValueError as e:
         raise HttpError(400, str(e))
-    return 201, {
+    return Status(201, {
         "id": review.id, "rating": review.rating, "comment": review.comment,
         "tags": review.tags, "reviewer_id": review.reviewer_id,
         "reviewer_name": review.reviewer.display_name or review.reviewer.username,
         "created_at": review.created_at.isoformat(),
-    }
+    })
 
 
 @router.get("/{skill_id}/reviews", response=List[SkillReviewOut])

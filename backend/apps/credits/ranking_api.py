@@ -3,6 +3,7 @@ from ninja import Router, Schema
 from django.core.cache import cache
 
 from common.permissions import AuthBearer
+from common.utils import build_absolute_media_url
 from apps.credits.services import CreditService
 
 
@@ -52,6 +53,14 @@ def get_credit_leaderboard(request):
         # Fallback: query directly
         entries, updated_at = _build_leaderboard()
         cache.set(CACHE_KEY, {"entries": entries, "updated_at": updated_at}, 600)
+
+    entries = [
+        {
+            **entry,
+            "avatar_url": build_absolute_media_url(request, entry.get("avatar_url", "")),
+        }
+        for entry in entries
+    ]
 
     # Check if request has auth
     my_rank = None

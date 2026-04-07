@@ -270,6 +270,36 @@ class SkillService:
             SearchService.sync_skill(skill)
         return skill
 
+    @staticmethod
+    @transaction.atomic
+    def archive(skill: Skill) -> Skill:
+        if skill.status == SkillStatus.ARCHIVED:
+            raise ValueError("Skill 已处于下架状态")
+
+        skill.status = SkillStatus.ARCHIVED
+        skill.save(update_fields=["status", "updated_at"])
+        SearchService.remove_skill(skill.id)
+        cache.delete(SkillService.TRENDING_CACHE_KEY)
+        return skill
+
+    @staticmethod
+    @transaction.atomic
+    def restore(skill: Skill) -> Skill:
+        if skill.status != SkillStatus.ARCHIVED:
+            raise ValueError("只有已下架的 Skill 才能恢复")
+
+        skill.status = SkillStatus.DRAFT
+        skill.save(update_fields=["status", "updated_at"])
+        return skill
+
+    @staticmethod
+    @transaction.atomic
+    def delete(skill: Skill):
+        skill_id = skill.id
+        skill.delete()
+        SearchService.remove_skill(skill_id)
+        cache.delete(SkillService.TRENDING_CACHE_KEY)
+
     @classmethod
     @transaction.atomic
     def submit_for_review(cls, skill: Skill) -> Skill:

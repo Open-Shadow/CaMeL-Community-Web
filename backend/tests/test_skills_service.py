@@ -863,3 +863,51 @@ class TestListVersions:
         versions = list(SkillService.list_versions(skill))
         assert versions[0].version > versions[1].version
         assert len(versions) == 2
+
+
+# ---------------------------------------------------------------------------
+# 10. Skill lifecycle management
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestSkillLifecycle:
+
+    def test_archive_skill(self):
+        creator = make_user()
+        skill = make_approved_skill(creator)
+
+        archived = SkillService.archive(skill)
+
+        assert archived.status == SkillStatus.ARCHIVED
+
+    def test_archive_already_archived_raises(self):
+        creator = make_user()
+        skill = make_skill(creator, status=SkillStatus.ARCHIVED)
+
+        with pytest.raises(ValueError, match="已处于下架"):
+            SkillService.archive(skill)
+
+    def test_restore_archived_skill(self):
+        creator = make_user()
+        skill = make_skill(creator, status=SkillStatus.ARCHIVED)
+
+        restored = SkillService.restore(skill)
+
+        assert restored.status == SkillStatus.DRAFT
+
+    def test_restore_non_archived_raises(self):
+        creator = make_user()
+        skill = make_skill(creator, status=SkillStatus.DRAFT)
+
+        with pytest.raises(ValueError, match="已下架"):
+            SkillService.restore(skill)
+
+    def test_delete_skill(self):
+        creator = make_user()
+        skill = make_skill(creator)
+        skill_id = skill.id
+
+        SkillService.delete(skill)
+
+        assert Skill.objects.filter(id=skill_id).count() == 0

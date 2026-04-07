@@ -120,7 +120,7 @@ export interface SkillPayload {
 }
 
 export async function listSkills(params: SkillListParams = {}) {
-  const response = await api.get<SkillSummary[]>('/skills', { params })
+  const response = await api.get<SkillSummary[]>('/skills/', { params })
   return response.data
 }
 
@@ -140,12 +140,27 @@ export async function getMySkills() {
 }
 
 export async function createSkill(payload: SkillPayload) {
-  const response = await api.post<SkillSummary>('/skills', payload)
+  const response = await api.post<SkillSummary>('/skills/', payload)
   return response.data
 }
 
 export async function submitSkill(skillId: number) {
   const response = await api.post<SkillSummary>(`/skills/${skillId}/submit`)
+  return response.data
+}
+
+export async function archiveSkill(skillId: number) {
+  const response = await api.post<SkillSummary>(`/skills/${skillId}/archive`)
+  return response.data
+}
+
+export async function restoreSkill(skillId: number) {
+  const response = await api.post<SkillSummary>(`/skills/${skillId}/restore`)
+  return response.data
+}
+
+export async function deleteSkill(skillId: number) {
+  const response = await api.delete<{ message: string }>(`/skills/${skillId}`)
   return response.data
 }
 

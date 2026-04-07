@@ -626,6 +626,21 @@ class TestAvatarUpload:
 
         assert response.status_code == 200
 
+    def test_accepts_legacy_avatar_field_name(self):
+        user = _create_user("legacyavatar@example.com")
+        client = Client()
+        token = _get_auth_header(user)
+
+        img_buf = _make_image_bytes("JPEG")
+
+        response = client.post(
+            "/api/users/me/avatar",
+            {"avatar": img_buf},
+            HTTP_AUTHORIZATION=token,
+        )
+
+        assert response.status_code == 200
+
     def test_rejects_bmp_format(self):
         user = _create_user("bmpuser@example.com")
         client = Client()
