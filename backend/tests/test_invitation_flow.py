@@ -50,7 +50,8 @@ def test_register_with_invite_code_binds_relation_and_rewards(client):
     assert invitation.used_by == invitee
     assert invitee.invited_by == inviter
     assert inviter.credit_score == 10
-    assert invitee.credit_score == 10
+    assert invitee.credit_score == 60
+    assert CreditLog.objects.filter(user=invitee, action=CreditAction.REGISTER).count() == 1
     assert CreditLog.objects.filter(action=CreditAction.INVITE_REGISTERED).count() == 2
 
 

@@ -11,6 +11,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
 from apps.accounts.services import AuthService, InvitationError, InvitationService
+from apps.credits.models import CreditAction
+from apps.credits.services import CreditService
 from common.permissions import AuthBearer
 from common.utils import build_absolute_media_url
 
@@ -134,6 +136,15 @@ def register(request, data: RegisterInput):
                     code=data.invite_code,
                     request=request,
                 )
+
+            # Ensure every newly registered account gets baseline credit,
+            # so first-time users can access gated marketplace flows.
+            CreditService.add_credit(
+                user,
+                CreditAction.REGISTER,
+                reference_id=f"register:{user.id}",
+                idempotency_key=f"register:{user.id}",
+            )
     except InvitationError as exc:
         return Status(400, {"message": str(exc)})
 

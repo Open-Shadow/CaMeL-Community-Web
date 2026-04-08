@@ -10,6 +10,7 @@ from django.test.utils import override_settings
 
 from apps.accounts.models import User
 from apps.accounts.services import AuthService
+from apps.credits.models import CreditAction, CreditLog
 
 
 pytestmark = pytest.mark.django_db
@@ -40,6 +41,27 @@ def test_register_sends_email_verification():
     assert email_address.primary is True
     assert email_address.verified is False
     assert 'verify-email?key=' in mail.outbox[0].body
+
+
+def test_register_awards_initial_credit_score():
+    client = Client()
+
+    response = client.post(
+        '/api/auth/register',
+        data=json.dumps(
+            {
+                'email': 'credit-init@example.com',
+                'password': 'StrongPass123!',
+                'display_name': 'Credit Init',
+            }
+        ),
+        content_type='application/json',
+    )
+
+    assert response.status_code == 201
+    user = User.objects.get(email='credit-init@example.com')
+    assert user.credit_score == 50
+    assert CreditLog.objects.filter(user=user, action=CreditAction.REGISTER).count() == 1
 
 
 def test_verify_email_marks_email_as_verified():
