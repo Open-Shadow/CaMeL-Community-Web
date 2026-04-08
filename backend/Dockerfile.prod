@@ -15,7 +15,11 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY . .
 RUN uv sync --frozen --no-dev
 
-RUN mkdir -p /app/staticfiles /app/media
+RUN adduser --disabled-password --gecos '' appuser \
+    && mkdir -p /app/staticfiles /app/media \
+    && chown -R appuser:appuser /app/staticfiles /app/media
+
+USER appuser
 
 EXPOSE 8000
 
