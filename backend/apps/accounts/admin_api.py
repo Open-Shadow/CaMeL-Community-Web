@@ -9,7 +9,8 @@ from ninja import Router, Schema
 from common.permissions import AuthBearer, admin_required, moderator_required
 from apps.accounts.models import User, UserRole
 from apps.payments.models import Transaction, TransactionType
-from apps.skills.models import Skill
+from apps.skills.models import Skill, SkillStatus
+from apps.skills.services import SkillService
 from apps.workshop.models import Article
 from apps.bounties.models import Bounty
 from apps.credits.models import CreditLog
@@ -106,6 +107,39 @@ class UserDetailOutput(Schema):
     articles_count: int
     transactions_count: int
     invitees_count: int
+
+
+class SkillReviewQueueItemOutput(Schema):
+    id: int
+    name: str
+    description: str
+    category: str
+    tags: list[str]
+    pricing_model: str
+    price_per_use: float | None
+    status: str
+    is_featured: bool
+    rejection_reason: str
+    creator_id: int
+    creator_name: str
+    created_at: str
+    updated_at: str
+
+
+class SkillReviewQueueOutput(Schema):
+    items: list[SkillReviewQueueItemOutput]
+    total: int
+    page: int
+    page_size: int
+
+
+class SkillReviewInput(Schema):
+    action: str  # APPROVE | REJECT
+    reason: str = ""
+
+
+class SkillFeaturedInput(Schema):
+    is_featured: bool
 
 
 # =============================================================================
@@ -280,7 +314,7 @@ def ban_user(request, user_id: int, data: BanInput):
 
     from apps.notifications.services import NotificationService
     NotificationService.send(
-        user=user,
+        recipient=user,
         notification_type="SYSTEM",
         title="账号已被封禁",
         content=f"您的账号已被管理员封禁。原因：{data.reason or '违反社区规范'}",
@@ -322,6 +356,114 @@ def adjust_user_credit(request, user_id: int, data: CreditAdjustInput):
     )
 
     return 200, {"message": f"信用分已调整，当前 {new_score} 分"}
+
+
+# =============================================================================
+# Skill Review API
+# =============================================================================
+
+def _skill_queue_item_out(skill: Skill) -> dict:
+    return {
+        "id": skill.id,
+        "name": skill.name,
+        "description": skill.description,
+        "category": skill.category,
+        "tags": skill.tags,
+        "pricing_model": skill.pricing_model,
+        "price_per_use": float(skill.price_per_use) if skill.price_per_use is not None else None,
+        "status": skill.status,
+        "is_featured": skill.is_featured,
+        "rejection_reason": skill.rejection_reason,
+        "creator_id": skill.creator_id,
+        "creator_name": skill.creator.display_name or skill.creator.username,
+        "created_at": skill.created_at.isoformat(),
+        "updated_at": skill.updated_at.isoformat(),
+    }
+
+
+@router.get("/skills/review-queue", response=SkillReviewQueueOutput)
+@moderator_required
+def list_skill_review_queue(
+    request,
+    status: str = "pending",
+    q: str = "",
+    page: int = 1,
+    page_size: int = 20,
+):
+    queryset = Skill.objects.select_related("creator")
+    if status == "pending":
+        queryset = queryset.filter(status=SkillStatus.PENDING_REVIEW)
+    elif status == "rejected":
+        queryset = queryset.filter(status=SkillStatus.REJECTED)
+    elif status == "approved":
+        queryset = queryset.filter(status=SkillStatus.APPROVED)
+    elif status == "all":
+        pass
+    else:
+        queryset = queryset.filter(status=SkillStatus.PENDING_REVIEW)
+
+    if q:
+        queryset = queryset.filter(
+            Q(name__icontains=q)
+            | Q(description__icontains=q)
+            | Q(creator__username__icontains=q)
+            | Q(creator__display_name__icontains=q)
+        )
+
+    total = queryset.count()
+    safe_page = max(page, 1)
+    safe_page_size = min(max(page_size, 1), 100)
+    offset = (safe_page - 1) * safe_page_size
+    items = queryset.order_by("-updated_at")[offset:offset + safe_page_size]
+
+    return {
+        "items": [_skill_queue_item_out(skill) for skill in items],
+        "total": total,
+        "page": safe_page,
+        "page_size": safe_page_size,
+    }
+
+
+@router.post("/skills/{skill_id}/review", response={200: SkillReviewQueueItemOutput, 400: MessageOutput, 404: MessageOutput})
+@moderator_required
+def review_skill(request, skill_id: int, data: SkillReviewInput):
+    try:
+        skill = Skill.objects.select_related("creator").get(id=skill_id)
+    except Skill.DoesNotExist:
+        return 404, {"message": "Skill 不存在"}
+
+    action = data.action.strip().upper()
+    if action not in {"APPROVE", "REJECT"}:
+        return 400, {"message": "审核动作无效"}
+    if action == "REJECT" and not data.reason.strip():
+        return 400, {"message": "拒绝时请填写原因"}
+
+    try:
+        skill = SkillService.review(
+            skill,
+            request.auth,
+            approve=(action == "APPROVE"),
+            reason=data.reason,
+        )
+    except ValueError as exc:
+        return 400, {"message": str(exc)}
+
+    return 200, _skill_queue_item_out(skill)
+
+
+@router.post("/skills/{skill_id}/featured", response={200: SkillReviewQueueItemOutput, 400: MessageOutput, 404: MessageOutput})
+@moderator_required
+def set_skill_featured(request, skill_id: int, data: SkillFeaturedInput):
+    try:
+        skill = Skill.objects.select_related("creator").get(id=skill_id)
+    except Skill.DoesNotExist:
+        return 404, {"message": "Skill 不存在"}
+
+    try:
+        updated = SkillService.set_featured(skill, is_featured=data.is_featured)
+    except ValueError as exc:
+        return 400, {"message": str(exc)}
+    return 200, _skill_queue_item_out(updated)
 
 
 # =============================================================================

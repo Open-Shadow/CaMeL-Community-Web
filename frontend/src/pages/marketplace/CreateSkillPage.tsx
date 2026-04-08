@@ -26,9 +26,6 @@ export default function CreateSkillPage() {
     name: '',
     description: '',
     system_prompt: '',
-    user_prompt_template: '',
-    example_input: '',
-    example_output: '',
     category: 'CODE_DEV',
     tags: [] as string[],
     pricing_model: 'FREE' as 'FREE' | 'PER_USE',
@@ -52,7 +49,7 @@ export default function CreateSkillPage() {
     setError('')
 
     if (!form.name || !form.description || !form.system_prompt) {
-      setError('请补全必填字段')
+      setError('请补全技能名称、skill简介和skill文件')
       return
     }
 
@@ -62,9 +59,6 @@ export default function CreateSkillPage() {
         name: form.name,
         description: form.description,
         system_prompt: form.system_prompt,
-        user_prompt_template: form.user_prompt_template || '',
-        example_input: form.example_input || '',
-        example_output: form.example_output || '',
         category: form.category,
         tags: form.tags,
         pricing_model: form.pricing_model,
@@ -106,22 +100,13 @@ export default function CreateSkillPage() {
           <Textarea value={form.description} onChange={e => setField('description', e.target.value)} placeholder="描述技能的用途和效果" rows={2} required />
         </div>
         <div>
-          <label className="text-sm font-medium mb-1 block">System Prompt *</label>
+          <label className="text-sm font-medium mb-1 block">skill文件 *</label>
           <Textarea
             value={form.system_prompt}
             onChange={e => setField('system_prompt', e.target.value)}
-            placeholder="定义 AI 的角色和行为规则"
+            placeholder="填写 skill 的核心执行内容"
             rows={6}
             required
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-1 block">用户输入模板</label>
-          <Textarea
-            value={form.user_prompt_template}
-            onChange={e => setField('user_prompt_template', e.target.value)}
-            placeholder="可选，用来约束用户输入格式"
-            rows={3}
           />
         </div>
         <div>
@@ -164,24 +149,6 @@ export default function CreateSkillPage() {
           <p className="mt-2 text-xs text-muted-foreground">
             Phase 1 先打通创建、审核和调用链路，付费结算会在后续阶段接入。
           </p>
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-1 block">示例输入</label>
-          <Textarea
-            value={form.example_input}
-            onChange={e => setField('example_input', e.target.value)}
-            placeholder="帮助审核与试用"
-            rows={3}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium mb-1 block">示例输出</label>
-          <Textarea
-            value={form.example_output}
-            onChange={e => setField('example_output', e.target.value)}
-            placeholder="帮助用户理解预期结果"
-            rows={4}
-          />
         </div>
         {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
         <Button type="submit" disabled={submitting} className="w-full">

@@ -70,7 +70,11 @@ export interface BountySummary {
   id: number
   title: string
   description: string
+  attachments: string[]
+  skill_requirements: string
   bounty_type: string
+  max_applicants: number
+  workload_estimate: string
   reward: number
   status: string
   deadline: string
@@ -116,7 +120,11 @@ export async function getBounty(id: number) {
 export async function createBounty(payload: {
   title: string
   description: string
+  attachments?: string[]
+  skill_requirements?: string
   bounty_type: string
+  max_applicants?: number
+  workload_estimate?: string
   reward: number
   deadline: string
 }) {

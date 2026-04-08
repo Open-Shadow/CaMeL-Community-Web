@@ -19,6 +19,7 @@ from apps.bounties.models import (
     BountyReview,
     BountyStatus,
     BountyType,
+    WorkloadEstimate,
 )
 from apps.credits.models import CreditAction, CreditLog
 from apps.credits.services import CreditService
@@ -31,6 +32,11 @@ class BountyError(ValueError):
 
 class BountyService:
     """Bounty marketplace and arbitration business logic."""
+
+    MAX_ATTACHMENTS = 5
+    MAX_ATTACHMENT_URL_LENGTH = 500
+    MAX_SKILL_REQUIREMENT_LENGTH = 2000
+    MAX_APPLICANTS = 20
 
     @staticmethod
     def _parse_deadline(deadline: str):
@@ -98,6 +104,13 @@ class BountyService:
     @classmethod
     @transaction.atomic
     def create_bounty(cls, creator, data: dict) -> Bounty:
+        title = (data.get("title") or "").strip()
+        description = (data.get("description") or "").strip()
+        if not title:
+            raise BountyError("悬赏标题不能为空")
+        if not description:
+            raise BountyError("悬赏描述不能为空")
+
         reward = quantize_amount(data["reward"])
         if reward < Decimal("1.00"):
             raise BountyError("悬赏金额至少为 $1.00")
@@ -107,13 +120,41 @@ class BountyService:
             raise BountyError("当前信用分不足，暂不能发布悬赏")
 
         deadline = cls._parse_deadline(data["deadline"])
-        PaymentsService.reserve_bounty_escrow(creator, reward, reference_id=f"bounty:{creator.id}:{data['title']}")
+        max_applicants = int(data.get("max_applicants") or 1)
+        if max_applicants < 1 or max_applicants > cls.MAX_APPLICANTS:
+            raise BountyError(f"最大申请人数需在 1 到 {cls.MAX_APPLICANTS} 之间")
+
+        workload_estimate = (data.get("workload_estimate") or "").strip()
+        if workload_estimate and workload_estimate not in set(WorkloadEstimate.values):
+            raise BountyError("预计工作量无效")
+
+        raw_attachments = data.get("attachments") or []
+        if not isinstance(raw_attachments, list):
+            raise BountyError("附件格式无效")
+        attachments: list[str] = []
+        for item in raw_attachments:
+            value = str(item).strip()
+            if not value:
+                continue
+            attachments.append(value[: cls.MAX_ATTACHMENT_URL_LENGTH])
+        if len(attachments) > cls.MAX_ATTACHMENTS:
+            raise BountyError(f"附件最多上传 {cls.MAX_ATTACHMENTS} 个")
+
+        skill_requirements = (data.get("skill_requirements") or "").strip()
+        if len(skill_requirements) > cls.MAX_SKILL_REQUIREMENT_LENGTH:
+            raise BountyError("技能要求内容过长")
+
+        PaymentsService.reserve_bounty_escrow(creator, reward, reference_id=f"bounty:{creator.id}:{title}")
 
         bounty = Bounty.objects.create(
             creator=creator,
-            title=data["title"].strip(),
-            description=data["description"].strip(),
+            title=title,
+            description=description,
+            attachments=attachments,
+            skill_requirements=skill_requirements,
             bounty_type=data["bounty_type"],
+            max_applicants=max_applicants,
+            workload_estimate=workload_estimate,
             reward=reward,
             deadline=deadline,
         )
@@ -143,6 +184,10 @@ class BountyService:
             raise BountyError("当前信用分不足，暂不能接单")
         if estimated_days <= 0:
             raise BountyError("预计天数必须大于 0")
+
+        existing = BountyApplication.objects.filter(bounty=bounty, applicant=applicant).first()
+        if not existing and bounty.applications.count() >= bounty.max_applicants:
+            raise BountyError("该悬赏已达到最大申请人数")
 
         application, created = BountyApplication.objects.get_or_create(
             bounty=bounty,

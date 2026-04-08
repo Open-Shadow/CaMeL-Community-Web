@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import axios from 'axios'
+import { api } from '@/hooks/use-auth'
 
-const PRESET_AMOUNTS = [1, 5, 10, 20]
+const PRESET_AMOUNTS = [0.1, 0.3, 0.5, 1]
 
 interface TipDialogProps {
   articleId: number
@@ -21,14 +21,14 @@ export function TipDialog({ articleId, articleTitle, open, onClose, onSuccess }:
 
   const handleTip = async () => {
     const val = parseFloat(amount)
-    if (!val || val < 0.01) { setError('最低打赏 $0.01'); return }
+    if (!val || val < 0.1) { setError('最低打赏 $0.10'); return }
     setLoading(true); setError('')
     try {
-      await axios.post(`/api/workshop/articles/${articleId}/tip`, { amount: val })
+      await api.post(`/workshop/articles/${articleId}/tip`, { amount: val })
       onSuccess?.(val)
       onClose()
     } catch (e: any) {
-      setError(e.response?.data?.detail || '打赏失败')
+      setError(e.response?.data?.message || e.response?.data?.detail || '打赏失败')
     } finally {
       setLoading(false)
     }
@@ -50,7 +50,7 @@ export function TipDialog({ articleId, articleTitle, open, onClose, onSuccess }:
           </div>
           <Input
             type="number"
-            min="0.01"
+            min="0.1"
             step="0.01"
             placeholder="自定义金额"
             value={amount}

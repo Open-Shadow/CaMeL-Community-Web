@@ -224,6 +224,21 @@ class TestApply:
         assert BountyApplication.objects.filter(bounty=bounty, applicant=applicant).count() == 1
 
     @pytest.mark.django_db
+    def test_max_applicants_limit_enforced(self):
+        creator = make_user(balance=Decimal("50.00"))
+        first_applicant = make_user()
+        second_applicant = make_user()
+        bounty = BountyService.create_bounty(
+            creator,
+            _default_bounty_data(max_applicants=1),
+        )
+
+        BountyService.apply(bounty, first_applicant, "First proposal", 2)
+
+        with pytest.raises(BountyError, match="最大申请人数"):
+            BountyService.apply(bounty, second_applicant, "Second proposal", 2)
+
+    @pytest.mark.django_db
     def test_low_credit_error(self):
         creator = make_user(balance=Decimal("50.00"))
         applicant = make_user(credit_score=10)

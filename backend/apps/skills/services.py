@@ -306,10 +306,6 @@ class SkillService:
         if skill.status not in (SkillStatus.DRAFT, SkillStatus.REJECTED):
             raise ValueError("只有草稿或被拒绝的技能可以提交审核")
 
-        skill.status = SkillStatus.PENDING_REVIEW
-        skill.rejection_reason = ""
-        skill.save(update_fields=["status", "rejection_reason"])
-
         payload = {
             "name": skill.name,
             "description": skill.description,
@@ -320,17 +316,74 @@ class SkillService:
         }
         passed, issues = ModerationService.auto_review(payload)
 
-        if passed:
-            skill.status = SkillStatus.APPROVED
-            skill.rejection_reason = ""
-            skill.save(update_fields=["status", "rejection_reason"])
-            CreditService.add_credit(skill.creator, CreditAction.PUBLISH_SKILL, str(skill.id))
-            SearchService.sync_skill(skill)
-        else:
+        if not passed:
             skill.status = SkillStatus.REJECTED
             skill.rejection_reason = "；".join(issues)
             skill.save(update_fields=["status", "rejection_reason"])
+            NotificationService.send(
+                recipient=skill.creator,
+                notification_type="skill_reviewed",
+                title="Skill 自动审核未通过",
+                content=f"「{skill.name}」存在风险项：{skill.rejection_reason}",
+                reference_id=str(skill.id),
+            )
+            return skill
 
+        skill.status = SkillStatus.PENDING_REVIEW
+        skill.rejection_reason = ""
+        skill.save(update_fields=["status", "rejection_reason"])
+        NotificationService.send(
+            recipient=skill.creator,
+            notification_type="skill_submitted",
+            title="Skill 已提交人工审核",
+            content=f"「{skill.name}」已通过自动检测，正在等待版主审核。",
+            reference_id=str(skill.id),
+        )
+        return skill
+
+    @staticmethod
+    @transaction.atomic
+    def review(skill: Skill, reviewer, *, approve: bool, reason: str = "") -> Skill:
+        if skill.status != SkillStatus.PENDING_REVIEW:
+            raise ValueError("当前 Skill 不在待审核状态")
+
+        if approve:
+            skill.status = SkillStatus.APPROVED
+            skill.rejection_reason = ""
+            skill.save(update_fields=["status", "rejection_reason", "updated_at"])
+            SearchService.sync_skill(skill)
+            CreditService.add_credit(skill.creator, CreditAction.PUBLISH_SKILL, str(skill.id))
+            NotificationService.send(
+                recipient=skill.creator,
+                notification_type="skill_reviewed",
+                title="Skill 审核通过",
+                content=f"「{skill.name}」已通过人工审核并上架。",
+                reference_id=str(skill.id),
+            )
+            return skill
+
+        review_reason = reason.strip() or "未通过人工审核，请根据规范调整后重新提交。"
+        skill.status = SkillStatus.REJECTED
+        skill.rejection_reason = review_reason
+        skill.save(update_fields=["status", "rejection_reason", "updated_at"])
+        SearchService.remove_skill(skill.id)
+        NotificationService.send(
+            recipient=skill.creator,
+            notification_type="skill_reviewed",
+            title="Skill 审核未通过",
+            content=f"「{skill.name}」未通过人工审核：{review_reason}",
+            reference_id=str(skill.id),
+        )
+        return skill
+
+    @staticmethod
+    @transaction.atomic
+    def set_featured(skill: Skill, *, is_featured: bool) -> Skill:
+        if is_featured and skill.status != SkillStatus.APPROVED:
+            raise ValueError("只有已上架的 Skill 才能设为精选")
+        skill.is_featured = bool(is_featured)
+        skill.save(update_fields=["is_featured", "updated_at"])
+        cache.delete(SkillService.TRENDING_CACHE_KEY)
         return skill
 
     @staticmethod

@@ -27,6 +27,14 @@ import {
 } from '@/lib/bounties'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 
+const WORKLOAD_LABELS: Record<string, string> = {
+  ONE_TO_TWO_HOURS: '1~2小时',
+  HALF_DAY: '半天',
+  ONE_DAY: '1天',
+  TWO_TO_THREE_DAYS: '2~3天',
+  ONE_WEEK_PLUS: '1周以上',
+}
+
 export default function BountyDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -111,9 +119,39 @@ export default function BountyDetailPage() {
         <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
           <span>发布者 {data.creator.display_name}</span>
           <span>申请数 {data.application_count}</span>
+          <span>申请上限 {data.max_applicants}</span>
           <span>截止 {formatDateTime(data.deadline)}</span>
           <span>修改轮次 {data.revision_count}/3</span>
+          {data.workload_estimate ? (
+            <span>预计工作量 {WORKLOAD_LABELS[data.workload_estimate] || data.workload_estimate}</span>
+          ) : null}
         </div>
+
+        {data.skill_requirements ? (
+          <div className="mt-4 rounded-xl border bg-muted/30 p-4 text-sm">
+            <div className="mb-2 font-medium">技能要求</div>
+            <p className="whitespace-pre-wrap text-muted-foreground">{data.skill_requirements}</p>
+          </div>
+        ) : null}
+
+        {data.attachments.length > 0 ? (
+          <div className="mt-4 rounded-xl border bg-muted/30 p-4 text-sm">
+            <div className="mb-2 font-medium">附件</div>
+            <div className="space-y-2">
+              {data.attachments.map((item) => (
+                <a
+                  key={item}
+                  href={item}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-primary hover:underline break-all"
+                >
+                  {item}
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {error ? <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div> : null}

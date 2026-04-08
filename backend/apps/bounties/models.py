@@ -22,11 +22,23 @@ class BountyType(models.TextChoices):
     GENERAL = "GENERAL", "通用任务"
 
 
+class WorkloadEstimate(models.TextChoices):
+    ONE_TO_TWO_HOURS = "ONE_TO_TWO_HOURS", "1~2小时"
+    HALF_DAY = "HALF_DAY", "半天"
+    ONE_DAY = "ONE_DAY", "1天"
+    TWO_TO_THREE_DAYS = "TWO_TO_THREE_DAYS", "2~3天"
+    ONE_WEEK_PLUS = "ONE_WEEK_PLUS", "1周以上"
+
+
 class Bounty(models.Model):
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounties")
     title = models.CharField(max_length=200)
     description = models.TextField()
+    attachments = models.JSONField(default=list, blank=True)
+    skill_requirements = models.TextField(blank=True)
     bounty_type = models.CharField(max_length=30, choices=BountyType.choices)
+    max_applicants = models.PositiveIntegerField(default=1)
+    workload_estimate = models.CharField(max_length=30, choices=WorkloadEstimate.choices, blank=True)
     reward = models.DecimalField(max_digits=8, decimal_places=2)
     status = models.CharField(max_length=20, choices=BountyStatus.choices, default=BountyStatus.OPEN)
     deadline = models.DateTimeField()

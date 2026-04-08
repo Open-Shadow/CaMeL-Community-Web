@@ -1,23 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
-import { api } from '@/hooks/use-auth';
 
 export function OAuthCallbackPage() {
   const { provider } = useParams<{ provider: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { loginWithTokens } = useAuth();
+  const { completeSocialLogin } = useAuth();
   const [error, setError] = useState('');
 
   useEffect(() => {
     const code = searchParams.get('code');
     if (!code || !provider) { setError('OAuth 回调参数缺失'); return; }
 
-    api.post('/auth/oauth/callback', { code, provider })
-      .then((res) => loginWithTokens(res.data).then(() => navigate('/')))
+    completeSocialLogin(code)
+      .then(() => navigate('/'))
       .catch((err) => setError(err.response?.data?.message || 'OAuth 登录失败'));
-  }, []);
+  }, [completeSocialLogin, navigate, provider, searchParams]);
 
   if (error) return (
     <div className="min-h-screen flex items-center justify-center">

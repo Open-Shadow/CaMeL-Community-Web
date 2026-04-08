@@ -5,7 +5,11 @@ from ninja import Schema
 class BountyCreateInput(Schema):
     title: str
     description: str
+    attachments: list[str] = []
+    skill_requirements: str = ""
     bounty_type: str
+    max_applicants: int = 1
+    workload_estimate: str = ""
     reward: float
     deadline: str
 
@@ -123,7 +127,11 @@ class BountySummaryOut(Schema):
     id: int
     title: str
     description: str
+    attachments: list[str]
+    skill_requirements: str
     bounty_type: str
+    max_applicants: int
+    workload_estimate: str
     reward: float
     status: str
     deadline: str

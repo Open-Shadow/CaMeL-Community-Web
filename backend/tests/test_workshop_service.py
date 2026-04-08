@@ -603,11 +603,11 @@ class TestTipService:
         assert tip.tipper == tipper
         assert tip.recipient == author
 
-        # 5% fee: tipper pays 1.00, author receives 0.95
+        # 打赏 100% 到作者：tipper 扣 1.00，作者到账 1.00
         tipper.refresh_from_db()
         author.refresh_from_db()
         assert tipper.balance == Decimal("9.00")
-        assert author.balance == Decimal("0.95")
+        assert author.balance == Decimal("1.00")
 
         # Article total_tips updated
         article.refresh_from_db()
@@ -647,8 +647,8 @@ class TestTipService:
 
     @patch("apps.workshop.services.NotificationService.send")
     @patch("apps.workshop.services.CreditService.add_credit", return_value=5)
-    def test_tip_fee_calculation(self, _mock_credit, _mock_notify):
-        """5% platform fee is deducted from recipient amount."""
+    def test_tip_full_amount_transferred_to_author(self, _mock_credit, _mock_notify):
+        """打赏金额应全额转给作者（无平台抽成）。"""
         author = _make_user("tip_author5", balance=Decimal("0.00"))
         tipper = _make_user("tipper6", balance=Decimal("100.00"))
         article = _make_article(author, status=ArticleStatus.PUBLISHED)
@@ -657,9 +657,8 @@ class TestTipService:
 
         tipper.refresh_from_db()
         author.refresh_from_db()
-        # fee = 2.00 * 0.05 = 0.10; recipient gets 1.90
         assert tipper.balance == Decimal("98.00")
-        assert author.balance == Decimal("1.90")
+        assert author.balance == Decimal("2.00")
 
 
 # ---------------------------------------------------------------------------

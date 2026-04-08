@@ -12,7 +12,11 @@ export default function CreateBountyPage() {
   const [form, setForm] = useState({
     title: '',
     description: '',
+    attachments: '',
+    skill_requirements: '',
     type: 'SKILL_CUSTOM',
+    max_applicants: '1',
+    workload_estimate: 'ONE_TO_TWO_HOURS',
     reward: '',
     deadline: '',
   })
@@ -29,6 +33,7 @@ export default function CreateBountyPage() {
 
     const title = form.title.trim()
     const reward = Number(form.reward)
+    const maxApplicants = Number(form.max_applicants)
     if (!title) {
       setMessage('请填写悬赏标题')
       return
@@ -39,6 +44,10 @@ export default function CreateBountyPage() {
     }
     if (!form.deadline) {
       setMessage('请选择截止日期')
+      return
+    }
+    if (!Number.isFinite(maxApplicants) || maxApplicants < 1 || maxApplicants > 20) {
+      setMessage('最大申请人数需在 1 到 20 之间')
       return
     }
 
@@ -54,7 +63,14 @@ export default function CreateBountyPage() {
       const bounty = await createBounty({
         title,
         description: form.description,
+        attachments: form.attachments
+          .split('\n')
+          .map((item) => item.trim())
+          .filter(Boolean),
+        skill_requirements: form.skill_requirements,
         bounty_type: form.type,
+        max_applicants: maxApplicants,
+        workload_estimate: form.workload_estimate,
         reward,
         deadline: deadlineDate.toISOString(),
       })
@@ -87,6 +103,15 @@ export default function CreateBountyPage() {
             placeholder="描述需求背景、交付物要求、验收标准..." rows={5} />
         </div>
         <div>
+          <label className="text-sm font-medium mb-1 block">附件链接（可选）</label>
+          <Textarea
+            value={form.attachments}
+            onChange={e => set('attachments', e.target.value)}
+            placeholder="每行一个链接，例如交互原型、示例文件等"
+            rows={3}
+          />
+        </div>
+        <div>
           <label className="text-sm font-medium mb-1 block">类型</label>
           <select className="w-full border rounded-md px-3 py-2 text-sm bg-background"
             value={form.type} onChange={e => set('type', e.target.value)}>
@@ -96,6 +121,42 @@ export default function CreateBountyPage() {
             <option value="BUG_FIX">问题修复</option>
             <option value="GENERAL">通用任务</option>
           </select>
+        </div>
+        <div>
+          <label className="text-sm font-medium mb-1 block">技能要求（可选）</label>
+          <Textarea
+            value={form.skill_requirements}
+            onChange={e => set('skill_requirements', e.target.value)}
+            placeholder="例如：熟悉 Claude Code、Python、日志分析"
+            rows={3}
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="text-sm font-medium mb-1 block">最大申请人数</label>
+            <Input
+              type="number"
+              min="1"
+              max="20"
+              step="1"
+              value={form.max_applicants}
+              onChange={e => set('max_applicants', e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">预计工作量</label>
+            <select
+              className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+              value={form.workload_estimate}
+              onChange={e => set('workload_estimate', e.target.value)}
+            >
+              <option value="ONE_TO_TWO_HOURS">1~2小时</option>
+              <option value="HALF_DAY">半天</option>
+              <option value="ONE_DAY">1天</option>
+              <option value="TWO_TO_THREE_DAYS">2~3天</option>
+              <option value="ONE_WEEK_PLUS">1周以上</option>
+            </select>
+          </div>
         </div>
         <div>
           <label className="text-sm font-medium mb-1 block">赏金 ($) *</label>

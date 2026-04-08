@@ -34,9 +34,13 @@ def _auth_client(user: User) -> Client:
 def test_skill_create_submit_call_review_flow():
     creator = _create_user("creator-flow@example.com")
     caller = _create_user("caller-flow@example.com", balance=Decimal("20.00"))
+    moderator = _create_user("moderator-flow@example.com")
+    moderator.role = "MODERATOR"
+    moderator.save(update_fields=["role"])
 
     creator_client = _auth_client(creator)
     caller_client = _auth_client(caller)
+    moderator_client = _auth_client(moderator)
 
     payload = {
         "name": "Flow Skill",
@@ -70,8 +74,15 @@ def test_skill_create_submit_call_review_flow():
     submit_response = creator_client.post(f"/api/skills/{skill_id}/submit")
     assert submit_response.status_code == 200, submit_response.content.decode()
     submitted = submit_response.json()
-    assert submitted["status"] in [SkillStatus.APPROVED, SkillStatus.REJECTED]
-    assert submitted["status"] == SkillStatus.APPROVED
+    assert submitted["status"] == SkillStatus.PENDING_REVIEW
+
+    review_response = moderator_client.post(
+        f"/api/admin/skills/{skill_id}/review",
+        data=json.dumps({"action": "APPROVE", "reason": ""}),
+        content_type="application/json",
+    )
+    assert review_response.status_code == 200, review_response.content.decode()
+    assert review_response.json()["status"] == SkillStatus.APPROVED
 
     call_response = caller_client.post(
         f"/api/skills/{skill_id}/call",
@@ -146,7 +157,11 @@ def test_skill_usage_preference_api_flow():
 
 def test_owner_can_archive_restore_and_delete_skill():
     owner = _create_user("owner-ops@example.com")
+    moderator = _create_user("moderator-ops@example.com")
+    moderator.role = "MODERATOR"
+    moderator.save(update_fields=["role"])
     client = _auth_client(owner)
+    moderator_client = _auth_client(moderator)
 
     create_response = client.post(
         "/api/skills/",
@@ -168,7 +183,15 @@ def test_owner_can_archive_restore_and_delete_skill():
 
     submit_response = client.post(f"/api/skills/{skill_id}/submit")
     assert submit_response.status_code == 200, submit_response.content.decode()
-    assert submit_response.json()["status"] == SkillStatus.APPROVED
+    assert submit_response.json()["status"] == SkillStatus.PENDING_REVIEW
+
+    review_response = moderator_client.post(
+        f"/api/admin/skills/{skill_id}/review",
+        data=json.dumps({"action": "APPROVE"}),
+        content_type="application/json",
+    )
+    assert review_response.status_code == 200, review_response.content.decode()
+    assert review_response.json()["status"] == SkillStatus.APPROVED
 
     archive_response = client.post(f"/api/skills/{skill_id}/archive")
     assert archive_response.status_code == 200, archive_response.content.decode()

@@ -296,16 +296,16 @@ class TestSubmitForReview:
 
     @patch("apps.skills.services.SearchService.sync_skill")
     @patch("apps.skills.services.CreditService.add_credit")
-    def test_draft_to_approved_flow(self, mock_credit, mock_sync):
+    def test_draft_to_pending_review_flow(self, mock_credit, mock_sync):
         user = make_user()
         skill = make_skill(user)
         assert skill.status == SkillStatus.DRAFT
 
         result = SkillService.submit_for_review(skill)
-        assert result.status == SkillStatus.APPROVED
+        assert result.status == SkillStatus.PENDING_REVIEW
         assert result.rejection_reason == ""
-        mock_credit.assert_called_once()
-        mock_sync.assert_called_once_with(skill)
+        mock_credit.assert_not_called()
+        mock_sync.assert_not_called()
 
     @patch("apps.skills.services.SearchService.sync_skill")
     @patch("apps.skills.services.CreditService.add_credit")
@@ -313,7 +313,9 @@ class TestSubmitForReview:
         user = make_user()
         skill = make_skill(user, status=SkillStatus.REJECTED)
         result = SkillService.submit_for_review(skill)
-        assert result.status == SkillStatus.APPROVED
+        assert result.status == SkillStatus.PENDING_REVIEW
+        mock_credit.assert_not_called()
+        mock_sync.assert_not_called()
 
     def test_rejected_for_jailbreak_pattern(self):
         user = make_user()
@@ -362,6 +364,32 @@ class TestSubmitForReview:
         skill = make_skill(user, status=SkillStatus.ARCHIVED)
         with pytest.raises(ValueError, match="草稿或被拒绝"):
             SkillService.submit_for_review(skill)
+
+    @patch("apps.skills.services.SearchService.sync_skill")
+    @patch("apps.skills.services.CreditService.add_credit")
+    def test_manual_review_approve_changes_status(self, mock_credit, mock_sync):
+        creator = make_user()
+        reviewer = make_user()
+        skill = make_skill(creator)
+        SkillService.submit_for_review(skill)
+
+        reviewed = SkillService.review(skill, reviewer, approve=True)
+        assert reviewed.status == SkillStatus.APPROVED
+        assert reviewed.rejection_reason == ""
+        mock_credit.assert_called_once()
+        mock_sync.assert_called_once_with(skill)
+
+    @patch("apps.skills.services.SearchService.remove_skill")
+    def test_manual_review_reject_writes_reason(self, mock_remove):
+        creator = make_user()
+        reviewer = make_user()
+        skill = make_skill(creator)
+        SkillService.submit_for_review(skill)
+
+        reviewed = SkillService.review(skill, reviewer, approve=False, reason="示例输出不符合描述")
+        assert reviewed.status == SkillStatus.REJECTED
+        assert "示例输出不符合描述" in reviewed.rejection_reason
+        mock_remove.assert_called_once_with(skill.id)
 
 
 # ---------------------------------------------------------------------------

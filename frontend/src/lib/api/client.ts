@@ -131,6 +131,13 @@ export interface TransactionRecord {
   created_at: string;
 }
 
+export interface TransactionList {
+  items: TransactionRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface IncomeSummary {
   total_income: number;
   transaction_count: number;
@@ -250,11 +257,11 @@ export const adminApi = {
 
 export const paymentsApi = {
   deposit: (amount: number) =>
-    api.post<CheckoutResult>('/payments/deposit', { amount }),
+    api.post<CheckoutResult>('/payments/checkout', { amount }),
   getBalance: () =>
     api.get<Balance>('/payments/balance'),
   listTransactions: (params?: { limit?: number; offset?: number; tx_type?: string }) =>
-    api.get<TransactionRecord[]>('/payments/transactions', { params }),
+    api.get<TransactionList>('/payments/transactions', { params }),
   getIncomeSummary: () =>
     api.get<IncomeSummary>('/payments/income-summary'),
 };

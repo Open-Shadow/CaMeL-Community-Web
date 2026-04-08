@@ -41,7 +41,11 @@ def test_bounty_api_happy_path_create_apply_accept_deliver_approve():
     create_payload = {
         "title": "API Flow Bounty",
         "description": "Verify full bounty api flow.",
+        "attachments": ["https://example.com/spec.pdf", "https://example.com/mockup.png"],
+        "skill_requirements": "熟悉 Python 与日志分析",
         "bounty_type": "GENERAL",
+        "max_applicants": 3,
+        "workload_estimate": "ONE_DAY",
         "reward": 20,
         "deadline": (timezone.now() + timedelta(days=7)).isoformat(),
     }
@@ -54,6 +58,10 @@ def test_bounty_api_happy_path_create_apply_accept_deliver_approve():
     created = create_response.json()
     bounty_id = created["id"]
     assert created["status"] == "OPEN"
+    assert created["attachments"] == create_payload["attachments"]
+    assert created["skill_requirements"] == create_payload["skill_requirements"]
+    assert created["max_applicants"] == 3
+    assert created["workload_estimate"] == "ONE_DAY"
 
     creator.refresh_from_db()
     assert creator.balance == Decimal("80.00")
@@ -92,4 +100,3 @@ def test_bounty_api_happy_path_create_apply_accept_deliver_approve():
     assert creator.balance == Decimal("80.00")
     assert creator.frozen_balance == Decimal("0.00")
     assert hunter.balance == Decimal("25.00")
-

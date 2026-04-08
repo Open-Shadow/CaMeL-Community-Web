@@ -36,9 +36,6 @@ from apps.workshop.models import (
 from apps.workshop.rules import get_article_vote_weight, should_collapse_comment
 
 
-PLATFORM_FEE_RATE = Decimal("0.05")  # 5% platform fee
-
-
 class TipService:
     """Tipping business logic (from main branch)."""
 
@@ -60,9 +57,6 @@ class TipService:
         if tipper.id == recipient.id:
             raise ValueError("不能打赏自己的文章")
 
-        fee = (amount * PLATFORM_FEE_RATE).quantize(Decimal("0.01"))
-        recipient_amount = amount - fee
-
         # Deduct from tipper
         TransactionService.deduct(
             tipper, amount, TransactionType.TIP_SEND,
@@ -72,7 +66,7 @@ class TipService:
 
         # Credit recipient
         TransactionService.credit(
-            recipient, recipient_amount, TransactionType.TIP_RECEIVE,
+            recipient, amount, TransactionType.TIP_RECEIVE,
             description=f"收到打赏《{article.title[:30]}》",
             reference_id=str(article_id),
         )

@@ -19,12 +19,20 @@ interface TransactionRecord {
   amount: number;
   balance_after: number;
   description: string;
+  reference_id?: string;
   created_at: string;
 }
 
 interface IncomeSummary {
   total_income: number;
   transaction_count: number;
+}
+
+interface TransactionListResponse {
+  items: TransactionRecord[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 const QUICK_AMOUNTS = [5, 10, 20, 50, 100];
@@ -41,15 +49,30 @@ export function WalletPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      api.get('/payments/balance'),
-      api.get('/payments/transactions'),
-      api.get('/payments/income-summary'),
-    ]).then(([b, t, i]) => {
-      setBalance(b.data);
-      setTransactions(t.data);
-      setIncome(i.data);
-    });
+    let active = true;
+
+    const fetchWallet = async () => {
+      setError('');
+      try {
+        const [b, t, i] = await Promise.all([
+          api.get<Balance>('/payments/balance'),
+          api.get<TransactionListResponse>('/payments/transactions'),
+          api.get<IncomeSummary>('/payments/income-summary'),
+        ]);
+        if (!active) return;
+        setBalance(b.data);
+        setTransactions(t.data.items || []);
+        setIncome(i.data);
+      } catch (err: any) {
+        if (!active) return;
+        setError(err.response?.data?.message || err.response?.data?.detail || '钱包数据加载失败');
+      }
+    };
+
+    void fetchWallet();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleDeposit = async () => {
@@ -57,10 +80,13 @@ export function WalletPage() {
     if (isNaN(amount) || amount < 1) { setError('最低充值 $1.00'); return; }
     setError(''); setIsDepositing(true);
     try {
-      const res = await api.post('/payments/deposit', { amount });
+      const res = await api.post<{ checkout_url: string; session_id: string }>('/payments/checkout', { amount });
+      if (!res.data?.checkout_url) {
+        throw new Error('未获取到支付跳转链接');
+      }
       window.location.href = res.data.checkout_url;
     } catch (err: any) {
-      setError(err.response?.data?.message || '充值失败');
+      setError(err.response?.data?.message || err.response?.data?.detail || err.message || '充值失败');
       setIsDepositing(false);
     }
   };
