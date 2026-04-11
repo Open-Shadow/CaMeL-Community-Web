@@ -704,6 +704,113 @@ def test_migration_0003_keeps_active_user_when_duplicate_has_null_last_login():
 
 
 @pytest.mark.django_db(transaction=True)
+def test_migration_0003_preserves_all_blank_email_users():
+    """Historical migration test: users with email='' are not treated
+    as duplicates and all remain active after migration."""
+
+    def setup(conn):
+        with conn.cursor() as cursor:
+            for i in range(3):
+                cursor.execute(
+                    "INSERT INTO accounts_user "
+                    "(password, is_superuser, username, first_name, last_name, "
+                    "email, is_staff, is_active, date_joined, "
+                    "display_name, bio, avatar_url, role, level, "
+                    "credit_score, balance, frozen_balance, created_at, updated_at) "
+                    "VALUES "
+                    f"('hash{i}', 0, 'blank_email_{i}', '', '', "
+                    f"'', 0, 1, '2026-01-0{i+1} 00:00:00', "
+                    "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                    f"'2026-01-0{i+1} 00:00:00', '2026-01-0{i+1} 00:00:00')"
+                )
+
+    def assertions(conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT username, email, is_active FROM accounts_user "
+                "WHERE username LIKE 'blank_email_%'"
+            )
+            rows = cursor.fetchall()
+
+        # All three blank-email users should remain active
+        assert len(rows) == 3
+        for row in rows:
+            assert row[1] == ""  # email still blank
+            assert row[2] == 1  # still active
+
+    _run_migration_test(
+        pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],
+        post_migrate_target=[("accounts", "0003_add_email_uniqueness_and_manager")],
+        setup_fn=setup,
+        assert_fn=assertions,
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_0003_prefers_active_over_inactive_duplicate():
+    """Historical migration test: when duplicates exist and one is active
+    while the other is inactive (but has a newer last_login), the migration
+    keeps the active account."""
+
+    def setup(conn):
+        with conn.cursor() as cursor:
+            # Active user with older last_login
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, last_login, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash1', 0, 'active_user', '', '', "
+                "'keeper@example.com', 0, 1, '2026-01-01 00:00:00', '2026-02-01 10:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+            )
+            # Inactive user with newer last_login (e.g. deactivated after login)
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, last_login, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash2', 0, 'inactive_user', '', '', "
+                "'KEEPER@Example.COM', 0, 0, '2026-01-02 00:00:00', '2026-03-15 10:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-02 00:00:00', '2026-01-02 00:00:00')"
+            )
+
+    def assertions(conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT username, email, is_active FROM accounts_user "
+                "WHERE username IN ('active_user', 'inactive_user') "
+                "ORDER BY is_active DESC"
+            )
+            rows = cursor.fetchall()
+
+        active_rows = [r for r in rows if r[2]]
+        inactive_rows = [r for r in rows if not r[2]]
+
+        # The active user should be kept
+        assert len(active_rows) == 1
+        assert active_rows[0][0] == "active_user"
+        assert active_rows[0][1] == "keeper@example.com"
+
+        # The inactive user should remain deactivated (email renamed)
+        assert len(inactive_rows) == 1
+        assert inactive_rows[0][0] == "inactive_user"
+
+    _run_migration_test(
+        pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],
+        post_migrate_target=[("accounts", "0003_add_email_uniqueness_and_manager")],
+        setup_fn=setup,
+        assert_fn=assertions,
+    )
+
+
+@pytest.mark.django_db(transaction=True)
 def test_migration_0003_repairs_both_drift_directions():
     """Historical migration test: 0002→0003 repairs both privilege drift paths:
     - is_superuser=True, role=USER → role=ADMIN, is_staff=True, is_superuser=True
@@ -921,3 +1028,20 @@ def test_admin_user_detail_view_accessible():
     content = resp.content.decode()
     # Verify the Business Fields fieldset is present
     assert "Business Fields" in content
+
+
+def test_admin_user_add_form_includes_email():
+    """Django admin User add form includes the email field so staff
+    cannot accidentally create users without an email address."""
+    admin_user = _create_user("addform_admin@test.com")
+    admin_user.role = UserRole.ADMIN
+    admin_user.is_staff = True
+    admin_user.is_superuser = True
+    admin_user.save(update_fields=["role", "is_staff", "is_superuser"])
+
+    client = Client()
+    client.force_login(admin_user)
+    resp = client.get("/admin/accounts/user/add/")
+    assert resp.status_code == 200
+    content = resp.content.decode()
+    assert 'name="email"' in content

@@ -19,3 +19,7 @@ class UserAdmin(BaseUserAdmin):
             ),
         }),
     )
+
+    add_fieldsets = BaseUserAdmin.add_fieldsets + (
+        (None, {"fields": ("email",)}),
+    )

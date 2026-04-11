@@ -20,7 +20,8 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     # --- Step 2: Detect and resolve case-insensitive duplicates ---
     from django.db.models import Count
     dupes = (
-        User.objects.values("email")
+        User.objects.exclude(email="")
+        .values("email")
         .annotate(cnt=Count("id"))
         .filter(cnt__gt=1)
     )
@@ -29,6 +30,7 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
         # Keep the most recently active; deactivate the rest
         from django.db.models import F
         users = User.objects.filter(email=email).order_by(
+            "-is_active",
             F("last_login").desc(nulls_last=True), "-date_joined",
         )
         keeper = users.first()
