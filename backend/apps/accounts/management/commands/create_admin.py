@@ -177,12 +177,20 @@ class Command(BaseCommand):
         """Elevate an existing user to admin."""
         was_admin = user.role == UserRole.ADMIN
 
-        if set_password:
-            if not password:
-                raise CommandError(
-                    "--set-password requires a password. "
-                    "Use --password or --from-env."
-                )
+        # Apply password when: (a) --set-password explicitly requested, or
+        # (b) promoting a non-admin and a password was provided.  Case (b)
+        # ensures first-time bootstrap applies ADMIN_PASSWORD without
+        # --set-password, while subsequent restarts (user is already admin)
+        # leave the current password untouched.
+        apply_password = set_password or (not was_admin and password)
+
+        if set_password and not password:
+            raise CommandError(
+                "--set-password requires a password. "
+                "Use --password or --from-env."
+            )
+
+        if apply_password and password:
             self._validate_password(password, user=user)
             user.set_password(password)
 
@@ -197,7 +205,7 @@ class Command(BaseCommand):
             # intentionally suspended keep their is_active state.
             user.is_active = True
             fields.append("is_active")
-        if set_password:
+        if apply_password and password:
             fields.append("password")
         user.save(update_fields=fields)
 
@@ -205,11 +213,11 @@ class Command(BaseCommand):
 
         if was_admin:
             msg = f"User {user.email} is already admin (no changes)."
-            if set_password:
+            if apply_password and password:
                 msg = f"Admin {user.email} password has been reset."
             self.stdout.write(self.style.SUCCESS(msg))
         else:
             msg = f"User {user.email} elevated to admin."
-            if set_password:
+            if apply_password and password:
                 msg += " Password has been reset."
             self.stdout.write(self.style.SUCCESS(msg))

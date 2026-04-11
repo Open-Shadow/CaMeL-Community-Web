@@ -72,7 +72,7 @@ def test_create_admin_new_user():
 
 
 def test_create_admin_elevate_existing():
-    """create_admin elevates existing non-admin user without changing password."""
+    """create_admin elevates existing non-admin user and applies password."""
     user = _create_user("existing@test.com", "OriginalPass123!")
     assert user.role == UserRole.USER
 
@@ -80,15 +80,15 @@ def test_create_admin_elevate_existing():
     call_command(
         "create_admin",
         email="existing@test.com",
-        password="NotUsed123!",
+        password="NewAdmin123!",
         stdout=out,
     )
     user.refresh_from_db()
     assert user.role == UserRole.ADMIN
     assert user.is_staff is True
     assert user.is_superuser is True
-    # Password should NOT have changed (no --set-password)
-    assert user.check_password("OriginalPass123!")
+    # Password IS applied on first promotion so operator can log in
+    assert user.check_password("NewAdmin123!")
 
 
 def test_create_admin_elevate_with_set_password():
