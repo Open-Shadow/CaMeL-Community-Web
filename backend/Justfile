@@ -24,3 +24,6 @@ test:
 
 seed:
     python manage.py seed
+
+admin email:
+    python manage.py create_admin --email {{email}}

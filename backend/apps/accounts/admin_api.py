@@ -7,7 +7,7 @@ from django.utils import timezone
 from ninja import Router, Schema
 
 from common.permissions import AuthBearer, admin_required, moderator_required
-from apps.accounts.models import User, UserRole
+from apps.accounts.models import User, UserRole, sync_admin_flags
 from apps.payments.models import Transaction, TransactionType
 from apps.skills.models import Skill, SkillStatus
 from apps.skills.services import SkillService
@@ -290,6 +290,7 @@ def update_user_role(request, user_id: int, data: RoleUpdateInput):
     old_role = user.role
     user.role = data.role
     user.save(update_fields=["role"])
+    sync_admin_flags(user)
 
     return 200, {"message": f"用户 {user.username} 角色已从 {old_role} 更改为 {data.role}"}
 
