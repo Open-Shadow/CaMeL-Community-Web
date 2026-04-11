@@ -1045,3 +1045,41 @@ def test_admin_user_add_form_includes_email():
     assert resp.status_code == 200
     content = resp.content.decode()
     assert 'name="email"' in content
+
+
+def test_admin_role_change_syncs_auth_flags():
+    """Changing a user's role via Django admin triggers sync_admin_flags,
+    so promoting to ADMIN grants is_staff/is_superuser and demoting revokes them."""
+    from apps.accounts.admin import UserAdmin as CamelUserAdmin
+
+    admin_user = _create_user("rolechange_admin@test.com")
+    admin_user.role = UserRole.ADMIN
+    admin_user.is_staff = True
+    admin_user.is_superuser = True
+    admin_user.save(update_fields=["role", "is_staff", "is_superuser"])
+
+    target_user = _create_user("target_role@test.com")
+    assert target_user.role == UserRole.USER
+    assert target_user.is_staff is False
+    assert target_user.is_superuser is False
+
+    # Simulate admin promoting the user to ADMIN
+    from django.contrib.admin.sites import AdminSite
+    site = AdminSite()
+    ma = CamelUserAdmin(User, site)
+
+    class FakeForm:
+        changed_data = ["role"]
+
+    target_user.role = UserRole.ADMIN
+    ma.save_model(request=None, obj=target_user, form=FakeForm(), change=True)
+    target_user.refresh_from_db()
+    assert target_user.is_staff is True
+    assert target_user.is_superuser is True
+
+    # Simulate demoting back to USER
+    target_user.role = UserRole.USER
+    ma.save_model(request=None, obj=target_user, form=FakeForm(), change=True)
+    target_user.refresh_from_db()
+    assert target_user.is_staff is False
+    assert target_user.is_superuser is False

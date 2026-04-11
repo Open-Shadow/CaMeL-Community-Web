@@ -120,9 +120,10 @@ class Command(BaseCommand):
 
     def _create_new(self, email, password):
         """Create a new admin user."""
-        self._validate_password(password)
-
         username = f"admin_{uuid.uuid4().hex[:12]}"
+        # Build a temporary user for similarity validation
+        temp_user = User(username=username, email=email)
+        self._validate_password(password, user=temp_user)
         user = User.objects.create_user(
             username=username,
             email=email,

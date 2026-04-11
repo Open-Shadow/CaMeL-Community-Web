@@ -114,9 +114,14 @@ def register(request, data: RegisterInput):
     if User.objects.filter(email__iexact=normalized_email).exists():
         return Status(400, {"message": "该邮箱已被注册"})
 
-    # Validate password
+    # Validate password with a temporary user for similarity checking
+    temp_user = User(
+        username=f"user_placeholder",
+        email=normalized_email,
+        display_name=data.display_name or normalized_email.split("@")[0],
+    )
     try:
-        validate_password(data.password)
+        validate_password(data.password, user=temp_user)
     except ValidationError as e:
         return Status(400, {"message": "密码强度不足: " + ", ".join(e.messages)})
 

@@ -35,9 +35,11 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
         )
         keeper = users.first()
         for user in users[1:]:
-            # Deactivate and mark email to avoid constraint violation
+            # Deactivate and mark email to avoid constraint violation.
+            # Truncate to 254 chars (Django's email max_length).
+            new_email = f"deactivated_{user.id}_{email}"
             user.is_active = False
-            user.email = f"deactivated_{user.id}_{email}"
+            user.email = new_email[:254]
             user.save(update_fields=["is_active", "email"])
 
     # --- Step 3: Repair privilege drift ---
