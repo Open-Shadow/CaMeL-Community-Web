@@ -490,91 +490,210 @@ def test_create_superuser_forces_admin_role_even_when_overridden():
 
 
 # ===========================================================================
-# Migration logic: data cleanup (0003 RunPython function)
+# Historical migration tests: scratch SQLite DB + MigrationExecutor
 # ===========================================================================
 
 
-def test_migration_logic_normalizes_emails_and_resolves_duplicates():
-    """The migration cleanup function normalizes emails to lowercase.
+def _run_migration_test(pre_migrate_target, post_migrate_target, setup_fn, assert_fn):
+    """Run a historical-schema migration test on a scratch SQLite database.
 
-    Note: case-variant duplicate resolution cannot be tested in the test DB
-    because the unique_email_ci constraint is already applied (all migrations
-    run before tests). This test verifies the normalization path by inserting
-    a mixed-case email and confirming it gets lowercased.
-    The duplicate-deactivation code path is a safety net for production
-    migrations where the constraint hasn't been applied yet.
+    1. Creates a temporary SQLite file
+    2. Migrates to pre_migrate_target
+    3. Calls setup_fn(connection) to insert test data
+    4. Migrates to post_migrate_target
+    5. Calls assert_fn(connection) to verify results
+    6. Cleans up
     """
-    import importlib
-    mod = importlib.import_module(
-        "apps.accounts.migrations.0003_add_email_uniqueness_and_manager"
+    import tempfile
+    from django.db import connections
+    from django.db.migrations.executor import MigrationExecutor
+    from django.test.utils import override_settings
+
+    # Create a temp SQLite file for the scratch database
+    tmp = tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+
+    scratch_db = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": tmp_path,
+            "TEST": {"NAME": tmp_path},
+        }
+    }
+
+    try:
+        with override_settings(DATABASES=scratch_db):
+            # Close any existing default connection so Django picks up new settings
+            connections["default"].close()
+            del connections["default"]
+            conn = connections["default"]
+
+            # Migrate to the pre-migration state (all dependencies + target)
+            executor = MigrationExecutor(conn)
+            executor.migrate(pre_migrate_target)
+            executor.loader.build_graph()
+
+            # Insert test data
+            setup_fn(conn)
+
+            # Migrate forward to the post-migration state
+            executor = MigrationExecutor(conn)
+            executor.migrate(post_migrate_target)
+
+            # Assert results
+            assert_fn(conn)
+
+            conn.close()
+    finally:
+        # Restore the real test database connection
+        connections["default"].close()
+        del connections["default"]
+        import os
+        os.unlink(tmp_path)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_0003_resolves_legacy_duplicate_emails():
+    """Historical migration test: 0002→0003 deactivates case-variant
+    duplicate emails and applies the unique constraint."""
+
+    def setup(conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash1', 0, 'user_upper', '', '', "
+                "'User@Example.COM', 0, 1, '2026-01-01 00:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+            )
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash2', 0, 'user_lower', '', '', "
+                "'user@example.com', 0, 1, '2026-01-02 00:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-02 00:00:00', '2026-01-02 00:00:00')"
+            )
+
+    def assertions(conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT username, email, is_active FROM accounts_user "
+                "WHERE username IN ('user_upper', 'user_lower') "
+                "ORDER BY is_active DESC"
+            )
+            rows = cursor.fetchall()
+
+        active_rows = [r for r in rows if r[2]]
+        inactive_rows = [r for r in rows if not r[2]]
+
+        # One row keeps canonical lowercase email, the other is deactivated
+        assert len(active_rows) == 1
+        assert active_rows[0][1] == "user@example.com"
+        assert len(inactive_rows) == 1
+        # Deactivated row has renamed email
+        assert inactive_rows[0][1] != "user@example.com"
+
+        # The constraint now rejects a new case-variant duplicate
+        import sqlite3
+        with conn.cursor() as cursor:
+            try:
+                cursor.execute(
+                    "INSERT INTO accounts_user "
+                    "(password, is_superuser, username, first_name, last_name, "
+                    "email, is_staff, is_active, date_joined, "
+                    "display_name, bio, avatar_url, role, level, "
+                    "credit_score, balance, frozen_balance, created_at, updated_at) "
+                    "VALUES "
+                    "('hash3', 0, 'user_dup', '', '', "
+                    "'USER@example.com', 0, 1, '2026-01-03 00:00:00', "
+                    "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                    "'2026-01-03 00:00:00', '2026-01-03 00:00:00')"
+                )
+                assert False, "Expected IntegrityError for case-variant duplicate"
+            except Exception:
+                pass  # Expected — constraint blocks the duplicate
+
+    _run_migration_test(
+        pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],
+        post_migrate_target=[("accounts", "0003_add_email_uniqueness_and_manager")],
+        setup_fn=setup,
+        assert_fn=assertions,
     )
-    normalize_emails_and_repair_drift = mod.normalize_emails_and_repair_drift
-    from django.apps import apps
-
-    # Create a user with mixed-case email via raw SQL.
-    # SQLite stores the literal string but the unique index uses LOWER().
-    from django.db import connection
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "INSERT INTO accounts_user "
-            "(password, is_superuser, username, first_name, last_name, "
-            "email, is_staff, is_active, date_joined, "
-            "display_name, bio, avatar_url, role, level, "
-            "credit_score, balance, frozen_balance, created_at, updated_at) "
-            "VALUES "
-            "('hash1', 0, 'mig_mixed', '', '', "
-            "'MixedCase@MigTest.COM', 0, 1, '2026-01-01 00:00:00', "
-            "'', '', '', 'USER', 'SEED', 0, 0, 0, "
-            "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
-        )
-
-    # Run the migration's RunPython function
-    normalize_emails_and_repair_drift(apps, None)
-
-    # Verify email was normalized to lowercase
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT email FROM accounts_user WHERE username = 'mig_mixed'"
-        )
-        row = cursor.fetchone()
-
-    assert row[0] == "mixedcase@migtest.com"
 
 
-def test_migration_logic_repairs_privilege_drift():
-    """The migration cleanup function syncs is_superuser=True users to ADMIN role."""
-    import importlib
-    mod = importlib.import_module(
-        "apps.accounts.migrations.0003_add_email_uniqueness_and_manager"
+@pytest.mark.django_db(transaction=True)
+def test_migration_0003_repairs_both_drift_directions():
+    """Historical migration test: 0002→0003 repairs both privilege drift paths:
+    - is_superuser=True, role=USER → role=ADMIN, is_staff=True, is_superuser=True
+    - role=ADMIN, is_superuser=False → role=ADMIN, is_staff=True, is_superuser=True
+    """
+
+    def setup(conn):
+        with conn.cursor() as cursor:
+            # Drift shape 1: is_superuser=True but role=USER
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash1', 1, 'drift_su_no_role', '', '', "
+                "'drift1@test.com', 0, 1, '2026-01-01 00:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+            )
+            # Drift shape 2: role=ADMIN but is_superuser=False
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash2', 0, 'drift_role_no_su', '', '', "
+                "'drift2@test.com', 0, 1, '2026-01-01 00:00:00', "
+                "'', '', '', 'ADMIN', 'SEED', 0, 0, 0, "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+            )
+
+    def assertions(conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT username, role, is_staff, is_superuser FROM accounts_user "
+                "WHERE username IN ('drift_su_no_role', 'drift_role_no_su') "
+                "ORDER BY username"
+            )
+            rows = cursor.fetchall()
+
+        assert len(rows) == 2
+
+        # drift_role_no_su: role=ADMIN, is_superuser=False → should now have all flags
+        role_no_su = [r for r in rows if r[0] == "drift_role_no_su"][0]
+        assert role_no_su[1] == "ADMIN"
+        assert role_no_su[2] == 1  # is_staff
+        assert role_no_su[3] == 1  # is_superuser
+
+        # drift_su_no_role: is_superuser=True, role=USER → should now be ADMIN
+        su_no_role = [r for r in rows if r[0] == "drift_su_no_role"][0]
+        assert su_no_role[1] == "ADMIN"
+        assert su_no_role[2] == 1  # is_staff
+        assert su_no_role[3] == 1  # is_superuser
+
+    _run_migration_test(
+        pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],
+        post_migrate_target=[("accounts", "0003_add_email_uniqueness_and_manager")],
+        setup_fn=setup,
+        assert_fn=assertions,
     )
-    normalize_emails_and_repair_drift = mod.normalize_emails_and_repair_drift
-    from django.apps import apps
-
-    # Create a drifted user: is_superuser=True but role=USER
-    from django.db import connection
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "INSERT INTO accounts_user "
-            "(password, is_superuser, username, first_name, last_name, "
-            "email, is_staff, is_active, date_joined, "
-            "display_name, bio, avatar_url, role, level, "
-            "credit_score, balance, frozen_balance, created_at, updated_at) "
-            "VALUES "
-            "('hash', 1, 'mig_drifted', '', '', "
-            "'mig_drifted@test.com', 0, 1, '2026-01-01 00:00:00', "
-            "'', '', '', 'USER', 'SEED', 0, 0, 0, "
-            "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
-        )
-
-    normalize_emails_and_repair_drift(apps, None)
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT role, is_staff, is_superuser FROM accounts_user "
-            "WHERE username = 'mig_drifted'"
-        )
-        row = cursor.fetchone()
-
-    assert row[0] == "ADMIN"
-    assert row[1] == 1  # is_staff
-    assert row[2] == 1  # is_superuser
