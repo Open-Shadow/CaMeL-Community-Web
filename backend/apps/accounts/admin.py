@@ -57,6 +57,10 @@ class UserAdmin(BaseUserAdmin):
             sync_admin_flags(obj)
             if "email" in form.changed_data:
                 self._sync_allauth_email(obj)
+        else:
+            # New user created via admin add form — create allauth row
+            if obj.email:
+                self._sync_allauth_email(obj)
 
     @staticmethod
     def _sync_allauth_email(user):
@@ -80,6 +84,11 @@ class UserAdmin(BaseUserAdmin):
         EmailAddress.objects.filter(user=user).exclude(
             email=user.email
         ).update(primary=False, verified=False)
+        # Clear any conflicting verified row on OTHER users for the new
+        # email, so update_or_create doesn't hit unique_verified_email.
+        EmailAddress.objects.filter(email=user.email, verified=True).exclude(
+            user=user
+        ).update(verified=False)
         # Ensure a primary, verified EmailAddress row exists for the new email.
         # Admin-set emails are treated as verified (admin explicitly chose it).
         EmailAddress.objects.update_or_create(
