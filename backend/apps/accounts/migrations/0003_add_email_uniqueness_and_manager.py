@@ -75,7 +75,7 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
                 .filter(user_id=group["user_id"])
                 .annotate(norm_email=Lower(Trim("email")))
                 .filter(norm_email=group["norm_email"])
-                .order_by("-primary", "-verified", "id")
+                .order_by("-verified", "-primary", "id")
             )
             keeper_id = rows.values_list("id", flat=True).first()
             if keeper_id is not None:

@@ -214,6 +214,17 @@ class Command(BaseCommand):
             fields.append("password")
         user.save(update_fields=fields)
 
+        # Warn if the promoted admin has no usable password
+        if not was_admin and not user.has_usable_password():
+            self.stderr.write(
+                self.style.WARNING(
+                    f"WARNING: {user.email} has no usable password "
+                    "(e.g. social-login account). Use --set-password to "
+                    "set one, or the admin won't be able to log in via "
+                    "email/password."
+                )
+            )
+
         self._sync_allauth_email(user)
 
         if was_admin:
