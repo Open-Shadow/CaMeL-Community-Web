@@ -140,10 +140,27 @@ class Command(BaseCommand):
         user.is_active = True
         user.save(update_fields=["role", "is_staff", "is_superuser", "is_active"])
 
+        self._sync_allauth_email(user)
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Admin account created: {email} (username: {username})"
             )
+        )
+
+    @staticmethod
+    def _sync_allauth_email(user):
+        """Create a primary, verified allauth EmailAddress for the user."""
+        try:
+            from allauth.account.models import EmailAddress
+        except ImportError:
+            return
+        if not user.email:
+            return
+        EmailAddress.objects.update_or_create(
+            user=user,
+            email=user.email,
+            defaults={"primary": True, "verified": True},
         )
 
     def _elevate_existing(self, user, password, set_password):
