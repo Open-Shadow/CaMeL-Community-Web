@@ -72,11 +72,12 @@ class UserAdmin(BaseUserAdmin):
                 primary=False, verified=False
             )
             return
-        # Demote existing primary addresses and clear their verified flag
-        # BEFORE creating/updating the new one — allauth enforces a single
-        # primary per user, and a stale verified row would reserve the old
-        # address via unique_verified_email, blocking future signups.
-        EmailAddress.objects.filter(user=user, primary=True).exclude(
+        # Demote and unverify ALL other EmailAddress rows for this user
+        # BEFORE creating/updating the new one. This covers both the old
+        # primary and any verified secondary addresses (e.g. from social
+        # login), releasing them from allauth's unique_verified_email
+        # constraint so the old addresses can be used by other users.
+        EmailAddress.objects.filter(user=user).exclude(
             email=user.email
         ).update(primary=False, verified=False)
         # Ensure a primary, verified EmailAddress row exists for the new email.
