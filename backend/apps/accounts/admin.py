@@ -67,6 +67,12 @@ class UserAdmin(BaseUserAdmin):
             return
         if not user.email:
             return
+        # Demote existing primary addresses BEFORE creating/updating the
+        # new one — allauth enforces a single primary per user, so having
+        # two primary rows simultaneously would cause an IntegrityError.
+        EmailAddress.objects.filter(user=user, primary=True).exclude(
+            email=user.email
+        ).update(primary=False)
         # Ensure a primary, verified EmailAddress row exists for the new email.
         # Admin-set emails are treated as verified (admin explicitly chose it).
         EmailAddress.objects.update_or_create(
@@ -74,7 +80,3 @@ class UserAdmin(BaseUserAdmin):
             email=user.email,
             defaults={"primary": True, "verified": True},
         )
-        # Demote any other addresses from primary
-        EmailAddress.objects.filter(user=user, primary=True).exclude(
-            email=user.email
-        ).update(primary=False)

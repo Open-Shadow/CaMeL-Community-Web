@@ -56,6 +56,36 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     # Must run after duplicate cleanup so that lowering doesn't collide
     # with allauth's own uniqueness constraints on case-variant rows.
     if EmailAddress is not None:
+        # First, deduplicate EmailAddress rows that would collide after
+        # normalization.  For each (user, normalized_email) group with
+        # multiple rows, keep the primary/verified/oldest one and delete
+        # the rest.
+        ea_dupes = (
+            EmailAddress.objects
+            .annotate(norm_email=Lower(Trim("email")))
+            .values("user_id", "norm_email")
+            .annotate(cnt=Count("id"))
+            .filter(cnt__gt=1)
+        )
+        for group in ea_dupes:
+            # Find all rows for this user whose normalized email matches.
+            # We annotate again so we can filter by the computed value.
+            rows = (
+                EmailAddress.objects
+                .filter(user_id=group["user_id"])
+                .annotate(norm_email=Lower(Trim("email")))
+                .filter(norm_email=group["norm_email"])
+                .order_by("-primary", "-verified", "id")
+            )
+            keeper_id = rows.values_list("id", flat=True).first()
+            if keeper_id is not None:
+                # Delete via a fresh queryset (can't .delete() on annotated qs)
+                EmailAddress.objects.filter(
+                    user_id=group["user_id"],
+                    id__in=list(rows.exclude(id=keeper_id).values_list("id", flat=True)),
+                ).delete()
+
+        # Now safe to bulk-normalize
         EmailAddress.objects.update(email=Lower(Trim("email")))
 
     # --- Step 3: Repair privilege drift ---
