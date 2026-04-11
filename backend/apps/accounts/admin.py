@@ -27,7 +27,7 @@ class UserAdmin(BaseUserAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if "email" in form.base_fields:
+        if obj is None and "email" in form.base_fields:
             form.base_fields["email"].required = True
         if obj is not None and request is not None and obj.pk == request.user.pk:
             # Inject form-level validation to prevent self-role changes.

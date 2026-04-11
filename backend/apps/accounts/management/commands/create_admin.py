@@ -186,6 +186,12 @@ class Command(BaseCommand):
         user.is_superuser = True
 
         fields = ["role", "is_staff", "is_superuser"]
+        if not was_admin:
+            # Reactivate when promoting a non-admin user so the new admin
+            # can actually log in.  Already-admin accounts that were
+            # intentionally suspended keep their is_active state.
+            user.is_active = True
+            fields.append("is_active")
         if set_password:
             fields.append("password")
         user.save(update_fields=fields)
