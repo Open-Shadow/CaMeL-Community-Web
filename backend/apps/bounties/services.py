@@ -436,9 +436,15 @@ class BountyService:
 
         if arbitration.resolved_at:
             # Appealed case: community arbitration already settled (money moved).
-            # Admin confirms or records override — no fund movement.
+            # Admin must confirm the existing settlement — contradictory results
+            # would create inconsistent metadata since funds cannot be re-moved.
             if result not in {"HUNTER_WIN", "CREATOR_WIN", "PARTIAL"}:
                 raise BountyError("仲裁结果无效")
+            if result != arbitration.result:
+                raise BountyError(
+                    f"仲裁资金已按 {arbitration.result} 结果分配，"
+                    f"无法改判为 {result}，如需变更请先撤销原结算"
+                )
             arbitration.admin_final_result = result
             arbitration.save(update_fields=["admin_final_result"])
             # Restore bounty to correct terminal status based on the

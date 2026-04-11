@@ -493,3 +493,84 @@ def test_blacklisted_refresh_token_cannot_refresh():
         content_type="application/json",
     )
     assert response.status_code == 401
+
+
+# ===========================================================================
+# Appealed admin_finalize rejects contradictory result
+# ===========================================================================
+
+
+def test_admin_finalize_rejects_contradictory_result_on_appeal():
+    """After community arbitration settled as HUNTER_WIN, admin cannot
+    finalize with CREATOR_WIN — that would create inconsistent metadata
+    since funds already moved per the original settlement."""
+    from apps.bounties.services import BountyService, BountyError
+    from apps.bounties.models import Bounty, Arbitration
+    from django.utils import timezone
+    import datetime
+
+    creator = _create_user("contra-creator@test.com", balance=Decimal("0.00"), frozen_balance=Decimal("10.00"))
+    hunter = _create_user("contra-hunter@test.com", balance=Decimal("10.00"))
+    admin = _create_user("contra-admin@test.com", role="ADMIN")
+
+    bounty = Bounty.objects.create(
+        title="Contradictory Bounty",
+        description="Test",
+        creator=creator,
+        reward=Decimal("10.00"),
+        bounty_type="GENERAL",
+        deadline=timezone.now() + datetime.timedelta(days=7),
+        status="DISPUTED",
+    )
+
+    Arbitration.objects.create(
+        bounty=bounty,
+        creator_statement="Creator's case",
+        hunter_statement="Hunter's case",
+        resolved_at=timezone.now(),
+        result="HUNTER_WIN",
+        hunter_ratio=Decimal("1.000"),
+        appeal_by=creator,
+        appeal_fee_paid=True,
+    )
+
+    with pytest.raises(BountyError, match="无法改判"):
+        BountyService.admin_finalize(admin, bounty, "CREATOR_WIN")
+
+    # Verify bounty status unchanged (still DISPUTED, not incorrectly set)
+    bounty.refresh_from_db()
+    assert bounty.status == "DISPUTED"
+
+
+# ===========================================================================
+# Workshop: inactive user stale token denied draft article access (API-level)
+# ===========================================================================
+
+
+def test_workshop_inactive_user_cannot_access_draft_article():
+    """An inactive user's stale token must not grant access to their own
+    unpublished draft article via the workshop GET endpoint."""
+    from apps.workshop.models import Article
+
+    author = _create_user("draft-author@test.com")
+    token = AuthService.get_tokens_for_user(author)["access"]
+
+    article = Article.objects.create(
+        title="My Draft Article",
+        content="This is a draft that should not be visible.",
+        author=author,
+        status="DRAFT",
+    )
+
+    # Deactivate user after creating draft and getting token
+    author.is_active = False
+    author.save(update_fields=["is_active"])
+
+    client = Client()
+    response = client.get(
+        f"/api/workshop/{article.id}",
+        HTTP_AUTHORIZATION=f"Bearer {token}",
+    )
+    # Should be 404 because _get_optional_user returns None for inactive,
+    # so the user is treated as anonymous, and anonymous can't see drafts
+    assert response.status_code == 404
