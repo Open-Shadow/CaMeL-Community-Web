@@ -127,6 +127,9 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     User.objects.filter(role="ADMIN", is_superuser=False).update(
         is_superuser=True, is_staff=True
     )
+    # role=ADMIN but is_staff=False -> grant is_staff (e.g. legacy admin
+    # with is_superuser=True but is_staff=False, locked out of /admin/)
+    User.objects.filter(role="ADMIN", is_staff=False).update(is_staff=True)
     # is_staff=True but role!=ADMIN -> clear is_staff (no admin access for non-admins)
     User.objects.filter(is_staff=True).exclude(role="ADMIN").update(
         is_staff=False
