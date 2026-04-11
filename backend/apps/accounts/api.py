@@ -114,9 +114,13 @@ def register(request, data: RegisterInput):
     if User.objects.filter(email__iexact=normalized_email).exists():
         return Status(400, {"message": "该邮箱已被注册"})
 
+    # Generate username early so password similarity checking uses the real
+    # pattern instead of a placeholder that could cause false rejections.
+    username = f"user_{uuid.uuid4().hex[:12]}"
+
     # Validate password with a temporary user for similarity checking
     temp_user = User(
-        username=f"user_placeholder",
+        username=username,
         email=normalized_email,
         display_name=data.display_name or normalized_email.split("@")[0],
     )
@@ -131,7 +135,7 @@ def register(request, data: RegisterInput):
                 InvitationService.validate_code(data.invite_code)
 
             user = User.objects.create_user(
-                username=f"user_{uuid.uuid4().hex[:12]}",
+                username=username,
                 email=normalized_email,
                 password=data.password,
                 display_name=data.display_name or normalized_email.split("@")[0],
