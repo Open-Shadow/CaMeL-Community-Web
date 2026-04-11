@@ -83,7 +83,10 @@ def _get_optional_user(request):
 
     try:
         payload = AccessToken(token)
-        return User.objects.get(id=payload["user_id"])
+        user = User.objects.get(id=payload["user_id"])
+        if not user.is_active:
+            return None
+        return user
     except (TokenError, User.DoesNotExist, KeyError):
         return None
 

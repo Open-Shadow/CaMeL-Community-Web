@@ -357,6 +357,8 @@ class BountyService:
         arbitration = Arbitration.objects.filter(bounty=bounty).first()
         if not arbitration:
             raise BountyError("当前悬赏没有争议案例")
+        if arbitration.resolved_at:
+            raise BountyError("该仲裁已有结果，如有异议请通过上诉流程处理")
         if arbitration.deadline and arbitration.deadline > timezone.now():
             raise BountyError("冷静期尚未结束")
 
@@ -431,9 +433,25 @@ class BountyService:
         arbitration = Arbitration.objects.filter(bounty=bounty).first()
         if not arbitration:
             raise BountyError("当前案件不存在")
-        cls._apply_arbitration_result(arbitration, result, hunter_ratio)
-        arbitration.admin_final_result = result
-        arbitration.save(update_fields=["admin_final_result"])
+
+        if arbitration.resolved_at:
+            # Appealed case: community arbitration already settled (money moved).
+            # Admin confirms or records override — no fund movement.
+            if result not in {"HUNTER_WIN", "CREATOR_WIN", "PARTIAL"}:
+                raise BountyError("仲裁结果无效")
+            arbitration.admin_final_result = result
+            arbitration.save(update_fields=["admin_final_result"])
+            # Restore bounty to correct terminal status based on the
+            # original settlement ratio (funds already distributed).
+            ratio = arbitration.hunter_ratio or Decimal("0")
+            bounty.status = BountyStatus.COMPLETED if ratio > 0 else BountyStatus.CANCELLED
+            bounty.save(update_fields=["status"])
+        else:
+            # First-time admin resolution (no prior community settlement).
+            cls._apply_arbitration_result(arbitration, result, hunter_ratio)
+            arbitration.admin_final_result = result
+            arbitration.save(update_fields=["admin_final_result"])
+
         return arbitration
 
     @classmethod

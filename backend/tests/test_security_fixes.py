@@ -269,3 +269,227 @@ def test_arbitration_resolved_at_blocks_re_settlement():
     BountyService._apply_arbitration_result(arb, "HUNTER_WIN", Decimal("1.000"))
     creator.refresh_from_db()
     assert creator.frozen_balance == Decimal("10.00")
+
+
+# ===========================================================================
+# Appeal → admin_finalize lifecycle
+# ===========================================================================
+
+
+def test_appeal_then_admin_finalize_completes_bounty():
+    """After community arbitration settles and a party appeals,
+    admin_finalize must record admin_final_result and restore
+    bounty to the correct terminal status without moving funds again."""
+    from apps.bounties.services import BountyService
+    from apps.bounties.models import Bounty, Arbitration
+    from django.utils import timezone
+    import datetime
+
+    creator = _create_user("appeal-creator@test.com", balance=Decimal("0.00"), frozen_balance=Decimal("10.00"))
+    hunter = _create_user("appeal-hunter@test.com", balance=Decimal("10.00"))
+    admin = _create_user("appeal-admin@test.com", role="ADMIN")
+
+    bounty = Bounty.objects.create(
+        title="Appeal Bounty",
+        description="Test",
+        creator=creator,
+        reward=Decimal("10.00"),
+        bounty_type="GENERAL",
+        deadline=timezone.now() + datetime.timedelta(days=7),
+        status="DISPUTED",
+    )
+
+    arb = Arbitration.objects.create(
+        bounty=bounty,
+        creator_statement="Creator's case",
+        hunter_statement="Hunter's case",
+        resolved_at=timezone.now(),
+        result="HUNTER_WIN",
+        hunter_ratio=Decimal("1.000"),
+        appeal_by=creator,
+        appeal_fee_paid=True,
+    )
+
+    result_arb = BountyService.admin_finalize(admin, bounty, "HUNTER_WIN")
+    assert result_arb.admin_final_result == "HUNTER_WIN"
+
+    bounty.refresh_from_db()
+    assert bounty.status == "COMPLETED"
+
+    # Verify no fund movement — balances unchanged
+    creator.refresh_from_db()
+    hunter.refresh_from_db()
+    assert creator.frozen_balance == Decimal("10.00")
+    assert hunter.balance == Decimal("10.00")
+
+
+def test_appeal_admin_finalize_cancelled_when_zero_ratio():
+    """When original settlement gave hunter_ratio=0 (creator wins),
+    admin_finalize should set bounty to CANCELLED."""
+    from apps.bounties.services import BountyService
+    from apps.bounties.models import Bounty, Arbitration
+    from django.utils import timezone
+    import datetime
+
+    creator = _create_user("appeal-c2@test.com", balance=Decimal("10.00"))
+    hunter = _create_user("appeal-h2@test.com", balance=Decimal("0.00"))
+    admin = _create_user("appeal-a2@test.com", role="ADMIN")
+
+    bounty = Bounty.objects.create(
+        title="Appeal Bounty 2",
+        description="Test",
+        creator=creator,
+        reward=Decimal("10.00"),
+        bounty_type="GENERAL",
+        deadline=timezone.now() + datetime.timedelta(days=7),
+        status="DISPUTED",
+    )
+
+    Arbitration.objects.create(
+        bounty=bounty,
+        creator_statement="Creator's case",
+        hunter_statement="Hunter's case",
+        resolved_at=timezone.now(),
+        result="CREATOR_WIN",
+        hunter_ratio=Decimal("0.000"),
+        appeal_by=hunter,
+        appeal_fee_paid=True,
+    )
+
+    BountyService.admin_finalize(admin, bounty, "CREATOR_WIN")
+    bounty.refresh_from_db()
+    assert bounty.status == "CANCELLED"
+
+
+# ===========================================================================
+# start_arbitration rejects already-resolved appealed cases
+# ===========================================================================
+
+
+def test_start_arbitration_rejects_resolved_case():
+    """start_arbitration must reject requests when resolved_at is set."""
+    from apps.bounties.services import BountyService, BountyError
+    from apps.bounties.models import Bounty, Arbitration, BountyApplication
+    from django.utils import timezone
+    import datetime
+
+    creator = _create_user("start-arb-c@test.com", balance=Decimal("10.00"))
+    hunter = _create_user("start-arb-h@test.com")
+
+    bounty = Bounty.objects.create(
+        title="Resolved Bounty",
+        description="Test",
+        creator=creator,
+        reward=Decimal("10.00"),
+        bounty_type="GENERAL",
+        deadline=timezone.now() + datetime.timedelta(days=7),
+        status="DISPUTED",
+    )
+    app = BountyApplication.objects.create(
+        bounty=bounty, applicant=hunter, proposal="I can do it", estimated_days=1,
+    )
+    bounty.accepted_application = app
+    bounty.save(update_fields=["accepted_application"])
+
+    Arbitration.objects.create(
+        bounty=bounty,
+        creator_statement="Creator's case",
+        hunter_statement="Hunter's case",
+        resolved_at=timezone.now(),
+        result="HUNTER_WIN",
+        hunter_ratio=Decimal("1.000"),
+    )
+
+    with pytest.raises(BountyError, match="已有结果"):
+        BountyService.start_arbitration(creator, bounty)
+
+
+# ===========================================================================
+# Workshop _get_optional_user ignores inactive user stale token
+# ===========================================================================
+
+
+def test_workshop_optional_user_ignores_inactive():
+    """Workshop _get_optional_user should return None for inactive users."""
+    from apps.workshop.api import _get_optional_user
+
+    user = _create_user("workshop-inactive@test.com")
+    token = AuthService.get_tokens_for_user(user)["access"]
+
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+
+    class FakeRequest:
+        headers = {"Authorization": f"Bearer {token}"}
+
+    result = _get_optional_user(FakeRequest())
+    assert result is None
+
+
+# ===========================================================================
+# H3: GET bounty endpoints don't call process_automations
+# ===========================================================================
+
+
+def test_bounty_list_does_not_call_process_automations():
+    """GET /api/bounties/ must not trigger process_automations side-effect."""
+    from unittest.mock import patch
+
+    client = Client()
+    with patch("apps.bounties.services.BountyService.process_automations") as mock_pa:
+        response = client.get("/api/bounties/")
+        assert response.status_code == 200
+        mock_pa.assert_not_called()
+
+
+def test_bounty_detail_does_not_call_process_automations():
+    """GET /api/bounties/{id} must not trigger process_automations."""
+    from unittest.mock import patch
+    from apps.bounties.models import Bounty
+    from django.utils import timezone
+    import datetime
+
+    creator = _create_user("pa-detail-c@test.com", balance=Decimal("100.00"))
+    bounty = Bounty.objects.create(
+        title="PA Detail Bounty",
+        description="Test",
+        creator=creator,
+        reward=Decimal("10.00"),
+        bounty_type="GENERAL",
+        deadline=timezone.now() + datetime.timedelta(days=7),
+        status="OPEN",
+    )
+
+    client = Client()
+    with patch("apps.bounties.services.BountyService.process_automations") as mock_pa:
+        response = client.get(f"/api/bounties/{bounty.id}")
+        assert response.status_code == 200
+        mock_pa.assert_not_called()
+
+
+# ===========================================================================
+# Logout blacklist: blacklisted refresh token cannot be reused
+# ===========================================================================
+
+
+def test_blacklisted_refresh_token_cannot_refresh():
+    """After logout (blacklist), the same refresh token must be rejected."""
+    user = _create_user("logout-bl@test.com")
+    tokens = AuthService.get_tokens_for_user(user)
+
+    client = Client()
+    # Logout — blacklist the refresh token
+    response = client.post(
+        "/api/auth/logout",
+        data=json.dumps({"refresh": tokens["refresh"]}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+
+    # Try to use the blacklisted refresh token
+    response = client.post(
+        "/api/auth/refresh",
+        data=json.dumps({"refresh": tokens["refresh"]}),
+        content_type="application/json",
+    )
+    assert response.status_code == 401
