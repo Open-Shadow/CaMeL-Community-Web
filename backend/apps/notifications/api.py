@@ -126,7 +126,10 @@ def notification_stream(request):
         # Send initial count
         yield f"data: {json.dumps({'type': 'count', 'count': last_count})}\n\n"
 
-        while True:
+        # Limit SSE connection lifetime to avoid blocking sync workers indefinitely.
+        # Clients should reconnect on close (EventSource does this automatically).
+        max_iterations = 60  # 60 * 5s = 5 minutes
+        for _ in range(max_iterations):
             time.sleep(5)
             current_count = NotificationService.unread_count(user)
             if current_count != last_count:

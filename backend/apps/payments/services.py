@@ -342,6 +342,13 @@ class PaymentsService:
             reference_id=reference_id,
             description="Skill 调用收入",
         )
+        PaymentsService._create_transaction(
+            caller,
+            TransactionType.PLATFORM_FEE,
+            -platform_fee,
+            reference_id=reference_id,
+            description="Skill 调用平台手续费",
+        )
         return {
             "charged_amount": charged_amount,
             "creator_income": creator_income,

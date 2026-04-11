@@ -11,7 +11,10 @@ class AuthBearer(HttpBearer):
         from rest_framework_simplejwt.exceptions import TokenError
         try:
             data = AccessToken(token)
-            return User.objects.get(id=data['user_id'])
+            user = User.objects.get(id=data['user_id'])
+            if not user.is_active:
+                return None
+            return user
         except (TokenError, User.DoesNotExist):
             return None
 

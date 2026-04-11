@@ -112,7 +112,7 @@ def test_arbitration_partial_vote_splits_escrow():
     arbitration.deadline = timezone.now() - timedelta(minutes=1)
     arbitration.save(update_fields=["deadline"])
 
-    arbitration = BountyService.start_arbitration(bounty)
+    arbitration = BountyService.start_arbitration(creator, bounty)
     assert arbitration.arbitrators.count() == 3
 
     for expert in experts:

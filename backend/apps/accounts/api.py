@@ -1,4 +1,6 @@
 """Authentication API routes using django-allauth and JWT."""
+import uuid
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -124,7 +126,7 @@ def register(request, data: RegisterInput):
                 InvitationService.validate_code(data.invite_code)
 
             user = User.objects.create_user(
-                username=normalized_email,
+                username=f"user_{uuid.uuid4().hex[:12]}",
                 email=normalized_email,
                 password=data.password,
                 display_name=data.display_name or normalized_email.split("@")[0],
@@ -193,12 +195,15 @@ def refresh_token(request, data: RefreshInput):
     """Refresh access token using refresh token."""
     try:
         refresh = RefreshToken(data.refresh)
+        user = User.objects.get(id=refresh['user_id'])
+        if not user.is_active:
+            return Status(401, {"message": "账号已被停用"})
         return Status(200, {
             'refresh': data.refresh,
             'access': str(refresh.access_token),
             'expires_in': 3600,
         })
-    except TokenError:
+    except (TokenError, User.DoesNotExist):
         return Status(401, {"message": "无效的刷新令牌"})
 
 

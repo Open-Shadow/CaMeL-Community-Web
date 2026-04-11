@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.github',
     'allauth.socialaccount.providers.google',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'django_extensions',
     'storages',
     # Local apps
@@ -145,6 +146,10 @@ CELERY_BEAT_SCHEDULE = {
     'cleanup-workshop-data': {
         'task': 'apps.workshop.tasks.cleanup_workshop_data',
         'schedule': crontab(minute='0', hour='5'),
+    },
+    'process-bounty-automations': {
+        'task': 'apps.bounties.tasks.process_bounty_automations',
+        'schedule': crontab(minute='*/10'),
     },
     'optimize-search-indexes': {
         'task': 'apps.search.tasks.optimize_search_indexes',

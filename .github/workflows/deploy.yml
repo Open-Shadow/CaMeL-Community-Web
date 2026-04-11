@@ -81,7 +81,17 @@ jobs:
             docker compose up -d --remove-orphans
 
             # Wait for backend to be healthy
-            sleep 10
+            for i in $(seq 1 30); do
+              if docker compose exec -T backend python -c "import django; django.setup()" 2>/dev/null; then
+                echo "Backend is healthy after ${i}s"
+                break
+              fi
+              if [ "$i" = "30" ]; then
+                echo "WARNING: Backend health check timed out after 30s"
+                docker compose logs --tail=30 backend
+              fi
+              sleep 1
+            done
             docker compose ps
 
             # Clean up old images

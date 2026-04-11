@@ -31,6 +31,28 @@ from common.permissions import AuthBearer
 router = Router(tags=["bounties"])
 
 
+def _get_optional_user(request):
+    """Extract authenticated user from request if present, without requiring auth."""
+    from rest_framework_simplejwt.tokens import AccessToken
+    from rest_framework_simplejwt.exceptions import TokenError
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return None
+    token = header.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    try:
+        payload = AccessToken(token)
+        user = User.objects.get(id=payload["user_id"])
+        if not user.is_active:
+            return None
+        return user
+    except (TokenError, User.DoesNotExist, KeyError):
+        return None
+
+
 def _user_out(user) -> dict:
     return {
         "id": user.id,
@@ -123,12 +145,27 @@ def _summary_out(bounty) -> dict:
     }
 
 
-def _detail_out(bounty) -> dict:
+def _is_bounty_participant(bounty, user) -> bool:
+    """Check if user is a participant (creator, accepted applicant, or arbitrator)."""
+    if user is None:
+        return False
+    if user.id == bounty.creator_id:
+        return True
+    if bounty.accepted_application_id and bounty.accepted_application.applicant_id == user.id:
+        return True
     arbitration = getattr(bounty, "arbitration", None)
+    if arbitration and arbitration.arbitrators.filter(id=user.id).exists():
+        return True
+    return False
+
+
+def _detail_out(bounty, viewer=None) -> dict:
+    arbitration = getattr(bounty, "arbitration", None)
+    is_participant = _is_bounty_participant(bounty, viewer)
     return {
         **_summary_out(bounty),
-        "applications": [_application_out(item) for item in bounty.applications.select_related("applicant").all()],
-        "deliverables": [_deliverable_out(item) for item in bounty.deliverables.select_related("submitter").all()],
+        "applications": [_application_out(item) for item in bounty.applications.select_related("applicant").all()] if is_participant else [],
+        "deliverables": [_deliverable_out(item) for item in bounty.deliverables.select_related("submitter").all()] if is_participant else [],
         "comments": [_comment_out(item) for item in bounty.comments.select_related("author").order_by("created_at")],
         "reviews": [
             {
@@ -143,7 +180,7 @@ def _detail_out(bounty) -> dict:
             }
             for review in bounty.reviews.select_related("reviewer", "reviewee").all()
         ],
-        "arbitration": _arbitration_out(arbitration),
+        "arbitration": _arbitration_out(arbitration) if is_participant else None,
     }
 
 
@@ -163,7 +200,6 @@ def list_bounties(request, q: str | None = None, status: str | None = None, boun
 
 @router.get("/mine", response=BountyListOut, auth=AuthBearer())
 def list_my_bounties(request, role: str = "all", limit: int = 20, offset: int = 0):
-    BountyService.process_automations()
     queryset = Bounty.objects.select_related("creator", "accepted_application__applicant").annotate(application_count=Count("applications"))
     if role == "creator":
         queryset = queryset.filter(creator=request.auth)
@@ -184,7 +220,6 @@ def list_my_bounties(request, role: str = "all", limit: int = 20, offset: int = 
 
 @router.get("/{bounty_id}", response=BountyDetailOut)
 def get_bounty(request, bounty_id: int):
-    BountyService.process_automations()
     bounty = get_object_or_404(
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "applications__applicant",
@@ -195,7 +230,7 @@ def get_bounty(request, bounty_id: int):
         ),
         id=bounty_id,
     )
-    return _detail_out(bounty)
+    return _detail_out(bounty, viewer=_get_optional_user(request))
 
 
 @router.post("", response={201: BountyDetailOut, 400: MessageOut}, auth=AuthBearer())
@@ -205,7 +240,8 @@ def create_bounty(request, data: BountyCreateInput):
     except (BountyError, PaymentError) as exc:
         return 400, {"message": str(exc)}
     return 201, _detail_out(
-        Bounty.objects.select_related("creator", "accepted_application__applicant").get(id=bounty.id)
+        Bounty.objects.select_related("creator", "accepted_application__applicant").get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -228,7 +264,8 @@ def accept_application(request, bounty_id: int, application_id: int):
         return 400, {"message": str(exc)}
     bounty.refresh_from_db()
     return _detail_out(
-        Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related("applications__applicant").get(id=bounty.id)
+        Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related("applications__applicant").get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -254,7 +291,8 @@ def submit_delivery(request, bounty_id: int, data: BountyDeliverableInput):
             "applications__applicant",
             "deliverables__submitter",
             "comments__author",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -265,7 +303,7 @@ def approve_bounty(request, bounty_id: int):
         BountyService.approve_delivery(request.auth, bounty)
     except (BountyError, PaymentError) as exc:
         return 400, {"message": str(exc)}
-    return _detail_out(Bounty.objects.select_related("creator", "accepted_application__applicant").get(id=bounty.id))
+    return _detail_out(Bounty.objects.select_related("creator", "accepted_application__applicant").get(id=bounty.id), viewer=request.auth)
 
 
 @router.post("/{bounty_id}/revision", response={200: BountyDetailOut, 400: MessageOut}, auth=AuthBearer())
@@ -276,7 +314,8 @@ def request_revision(request, bounty_id: int, data: BountyDecisionInput):
     except BountyError as exc:
         return 400, {"message": str(exc)}
     return _detail_out(
-        Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related("comments__author").get(id=bounty.id)
+        Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related("comments__author").get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -287,7 +326,7 @@ def cancel_bounty(request, bounty_id: int, data: BountyDecisionInput):
         BountyService.cancel_bounty(request.auth, bounty, reason=data.feedback)
     except (BountyError, PaymentError) as exc:
         return 400, {"message": str(exc)}
-    return _detail_out(Bounty.objects.select_related("creator", "accepted_application__applicant").get(id=bounty.id))
+    return _detail_out(Bounty.objects.select_related("creator", "accepted_application__applicant").get(id=bounty.id), viewer=request.auth)
 
 
 @router.post("/{bounty_id}/dispute", response={200: BountyDetailOut, 400: MessageOut}, auth=AuthBearer())
@@ -301,7 +340,8 @@ def create_dispute(request, bounty_id: int, data: ArbitrationStatementInput):
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "arbitration__arbitrators",
             "arbitration__votes__arbitrator",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -316,7 +356,8 @@ def submit_statement(request, bounty_id: int, data: ArbitrationStatementInput):
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "arbitration__arbitrators",
             "arbitration__votes__arbitrator",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -324,14 +365,15 @@ def submit_statement(request, bounty_id: int, data: ArbitrationStatementInput):
 def start_arbitration(request, bounty_id: int):
     bounty = get_object_or_404(Bounty.objects.select_related("creator", "accepted_application__applicant"), id=bounty_id)
     try:
-        BountyService.start_arbitration(bounty)
+        BountyService.start_arbitration(request.auth, bounty)
     except BountyError as exc:
         return 400, {"message": str(exc)}
     return _detail_out(
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "arbitration__arbitrators",
             "arbitration__votes__arbitrator",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -346,7 +388,8 @@ def cast_arbitration_vote(request, bounty_id: int, data: ArbitrationVoteInput):
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "arbitration__arbitrators",
             "arbitration__votes__arbitrator",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -361,7 +404,8 @@ def appeal_arbitration(request, bounty_id: int, data: ArbitrationAppealInput):
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "arbitration__arbitrators",
             "arbitration__votes__arbitrator",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -376,7 +420,8 @@ def admin_finalize_arbitration(request, bounty_id: int, data: AdminArbitrationDe
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "arbitration__arbitrators",
             "arbitration__votes__arbitrator",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 
@@ -398,7 +443,8 @@ def add_bounty_review(request, bounty_id: int, data: BountyReviewInput):
         Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
             "reviews__reviewer",
             "reviews__reviewee",
-        ).get(id=bounty.id)
+        ).get(id=bounty.id),
+        viewer=request.auth,
     )
 
 

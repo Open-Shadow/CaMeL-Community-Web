@@ -162,7 +162,6 @@ class BountyService:
 
     @classmethod
     def list_bounties(cls, *, q: str | None = None, status: str | None = None, bounty_type: str | None = None):
-        cls.process_automations()
         queryset = Bounty.objects.select_related("creator", "accepted_application__applicant").annotate(
             application_count=Count("applications")
         )
@@ -349,7 +348,12 @@ class BountyService:
 
     @classmethod
     @transaction.atomic
-    def start_arbitration(cls, bounty: Bounty) -> Arbitration:
+    def start_arbitration(cls, actor, bounty: Bounty) -> Arbitration:
+        accepted_user = cls._accepted_user(bounty)
+        if actor.id not in {bounty.creator_id, accepted_user.id if accepted_user else None}:
+            raise BountyError("只有交易双方可以启动仲裁")
+        if bounty.status != BountyStatus.DISPUTED:
+            raise BountyError("只有争议中的悬赏才能启动仲裁")
         arbitration = Arbitration.objects.filter(bounty=bounty).first()
         if not arbitration:
             raise BountyError("当前悬赏没有争议案例")
@@ -402,6 +406,9 @@ class BountyService:
         arbitration = Arbitration.objects.filter(bounty=bounty).first()
         if not arbitration or not arbitration.resolved_at:
             raise BountyError("当前案件尚未形成可上诉结果")
+        accepted_user = cls._accepted_user(bounty)
+        if actor.id not in {bounty.creator_id, accepted_user.id if accepted_user else None}:
+            raise BountyError("只有交易双方可以上诉")
         PaymentsService.charge_appeal_fee(actor, reference_id=f"arbitration:{arbitration.id}:appeal")
         arbitration.appeal_by = actor
         arbitration.appeal_fee_paid = True
@@ -411,6 +418,9 @@ class BountyService:
             else:
                 arbitration.hunter_statement = f"{arbitration.hunter_statement}\n\n上诉理由：{reason.strip()}".strip()
         arbitration.save()
+        # Set bounty back to DISPUTED so admin dispute list picks it up
+        bounty.status = BountyStatus.DISPUTED
+        bounty.save(update_fields=["status"])
         return arbitration
 
     @classmethod
@@ -469,7 +479,6 @@ class BountyService:
 
     @classmethod
     def list_active_disputes(cls):
-        cls.process_automations()
         return (
             Bounty.objects.select_related("creator", "accepted_application__applicant")
             .prefetch_related("arbitration__arbitrators", "arbitration__votes__arbitrator")
@@ -501,7 +510,7 @@ class BountyService:
 
     @classmethod
     def _apply_arbitration_result(cls, arbitration: Arbitration, result: str, hunter_ratio: float | None = None):
-        if arbitration.resolved_at and arbitration.admin_final_result:
+        if arbitration.resolved_at:
             return
         bounty = arbitration.bounty
         accepted_user = cls._accepted_user(bounty)

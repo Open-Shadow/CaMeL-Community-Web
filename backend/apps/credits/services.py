@@ -317,7 +317,7 @@ class CreditService:
 
         from apps.notifications.services import NotificationService
         NotificationService.send(
-            user=user,
+            recipient=user,
             notification_type="SYSTEM",
             title="悬赏板已冻结",
             content=f"您的信用分已降至 {user.credit_score}（低于 {BOUNTY_FREEZE_THRESHOLD}），"
@@ -334,7 +334,7 @@ class CreditService:
 
             from apps.notifications.services import NotificationService
             NotificationService.send(
-                user=user,
+                recipient=user,
                 notification_type="SYSTEM",
                 title="悬赏板已解冻",
                 content=f"您的信用分已恢复至 {user.credit_score}（≥ {BOUNTY_FREEZE_THRESHOLD}），"

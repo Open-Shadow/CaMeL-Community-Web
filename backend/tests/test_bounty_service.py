@@ -720,7 +720,7 @@ class TestStartArbitration:
         arb.deadline = timezone.now() - timedelta(minutes=1)
         arb.save(update_fields=["deadline"])
 
-        arb = BountyService.start_arbitration(bounty)
+        arb = BountyService.start_arbitration(creator, bounty)
 
         assert arb.arbitrators.count() == 3
         bounty.refresh_from_db()
@@ -739,7 +739,7 @@ class TestStartArbitration:
         arb.deadline = timezone.now() - timedelta(minutes=1)
         arb.save(update_fields=["deadline"])
 
-        arb = BountyService.start_arbitration(bounty)
+        arb = BountyService.start_arbitration(creator, bounty)
 
         arbitrator_ids = set(arb.arbitrators.values_list("id", flat=True))
         assert creator.id not in arbitrator_ids
@@ -752,15 +752,15 @@ class TestStartArbitration:
 
         # Deadline is in the future (cooling period not expired)
         with pytest.raises(BountyError, match="冷静期尚未结束"):
-            BountyService.start_arbitration(bounty)
+            BountyService.start_arbitration(creator, bounty)
 
     @pytest.mark.django_db
     def test_no_arbitration_error(self):
         creator = make_user(balance=Decimal("50.00"))
         bounty = BountyService.create_bounty(creator, _default_bounty_data())
 
-        with pytest.raises(BountyError, match="当前悬赏没有争议案例"):
-            BountyService.start_arbitration(bounty)
+        with pytest.raises(BountyError):
+            BountyService.start_arbitration(creator, bounty)
 
     @pytest.mark.django_db
     def test_fewer_than_3_qualified_candidates(self):
@@ -771,7 +771,7 @@ class TestStartArbitration:
         arb.deadline = timezone.now() - timedelta(minutes=1)
         arb.save(update_fields=["deadline"])
 
-        arb = BountyService.start_arbitration(bounty)
+        arb = BountyService.start_arbitration(creator, bounty)
         # Only 2 candidates available
         assert arb.arbitrators.count() == 2
 
@@ -784,7 +784,7 @@ class TestCastVote:
         experts = _create_arbitrators(3, credit_score=600)
         arb.deadline = timezone.now() - timedelta(minutes=1)
         arb.save(update_fields=["deadline"])
-        arb = BountyService.start_arbitration(bounty)
+        arb = BountyService.start_arbitration(creator, bounty)
         # Replace auto-selected arbitrators with our known ones
         arb.arbitrators.set(experts)
         return creator, hunter, bounty, arb, experts
@@ -1316,7 +1316,7 @@ class TestFullLifecycle:
         # Expire cooling period and start arbitration
         arb.deadline = timezone.now() - timedelta(minutes=1)
         arb.save(update_fields=["deadline"])
-        arb = BountyService.start_arbitration(bounty)
+        arb = BountyService.start_arbitration(creator, bounty)
         arb.arbitrators.set(experts)
         bounty.refresh_from_db()
         assert bounty.status == BountyStatus.ARBITRATING

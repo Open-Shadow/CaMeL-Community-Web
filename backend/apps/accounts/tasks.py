@@ -1,4 +1,6 @@
 """Celery tasks for invitation rewards and email sending."""
+from decimal import Decimal
+
 from celery import shared_task
 from django.contrib.auth import get_user_model
 
@@ -81,7 +83,7 @@ def check_first_deposit_reward(invitee_id: int):
 
     inviter = invitation.inviter
     # Grant $0.50 bonus to inviter
-    inviter.balance += 0.50
+    inviter.balance += Decimal("0.50")
     inviter.save(update_fields=["balance"])
 
     invitation.first_deposit_rewarded = True

@@ -141,15 +141,10 @@ def create_stripe_checkout(request, data: DepositInput):
         return 400, {"message": f"支付服务错误: {str(e)}"}
 
 
-@router.post("/deposits", response={200: WalletOutput, 400: MessageOutput})
+@router.post("/deposits", response={400: MessageOutput})
 def create_deposit(request, data: DepositInput):
-    """Create a direct deposit (e.g. after Stripe webhook confirms payment)."""
-    try:
-        PaymentsService.create_deposit(request.auth, data.amount, reference_id=f"manual-deposit:{request.auth.id}")
-    except PaymentError as exc:
-        return 400, {"message": str(exc)}
-    wallet = PaymentsService.get_wallet_summary(request.auth)
-    return _serialize_wallet(wallet)
+    """Deposits are only processed via Stripe webhook. Direct calls are rejected."""
+    return 400, {"message": "充值请通过 Stripe 支付流程完成"}
 
 
 @router.get("/wallet", response=WalletOutput)

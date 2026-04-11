@@ -36,7 +36,7 @@ from apps.workshop.schemas import (
     VoteOut,
 )
 from apps.workshop.services import ArticleService, SeriesService, TipService
-from common.permissions import AuthBearer, login_required
+from common.permissions import AuthBearer
 from common.utils import build_absolute_media_url
 
 router = Router(tags=["workshop"])
@@ -238,7 +238,7 @@ def _comment_out(comment: Comment, user=None) -> dict:
 
 # ─── Tip endpoints (from main) ────────────────────────────────────────────────
 
-@router.post("/articles/{article_id}/tip", auth=login_required)
+@router.post("/articles/{article_id}/tip", auth=AuthBearer())
 def send_tip(request, article_id: int, payload: TipIn):
     tip = TipService.send_tip(request.auth, article_id, payload.amount)
     return {"id": tip.id, "amount": float(tip.amount)}
