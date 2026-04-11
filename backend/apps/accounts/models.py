@@ -71,7 +71,7 @@ class User(AbstractUser):
 
     def save(self, *args, **kwargs):
         if self.email:
-            self.email = self.email.lower()
+            self.email = self.email.strip().lower()
         super().save(*args, **kwargs)
 
 

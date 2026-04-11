@@ -350,6 +350,13 @@ def test_email_stored_lowercase():
     assert user.email == "mixedcase@example.com"
 
 
+def test_email_whitespace_stripped_on_save():
+    """Leading/trailing whitespace in email is stripped on save."""
+    user = _create_user("  padded@example.com  ")
+    user.refresh_from_db()
+    assert user.email == "padded@example.com"
+
+
 def test_duplicate_email_different_case_rejected():
     """Creating a user with case-variant of existing email fails."""
     _create_user("unique@test.com")
@@ -1183,3 +1190,54 @@ def test_create_admin_does_not_reactivate_suspended_admin():
     user.refresh_from_db()
     assert user.role == UserRole.ADMIN
     assert user.is_active is False  # must stay disabled
+
+
+def test_admin_cannot_change_own_role():
+    """An admin cannot change their own role via Django admin,
+    preventing accidental self-lockout."""
+    from apps.accounts.admin import UserAdmin as CamelUserAdmin
+    from django.contrib.admin.sites import AdminSite
+
+    admin_user = _create_user("selflock@test.com")
+    admin_user.role = UserRole.ADMIN
+    admin_user.is_staff = True
+    admin_user.is_superuser = True
+    admin_user.save(update_fields=["role", "is_staff", "is_superuser"])
+
+    site = AdminSite()
+    ma = CamelUserAdmin(User, site)
+
+    class FakeRequest:
+        user = admin_user
+
+    class FakeForm:
+        changed_data = ["role"]
+
+    admin_user.role = UserRole.USER  # attempt to demote self
+    with pytest.raises(ValidationError, match="Cannot change your own role"):
+        ma.save_model(
+            request=FakeRequest(), obj=admin_user, form=FakeForm(), change=True
+        )
+
+
+def test_admin_add_form_requires_email():
+    """Django admin add-user form requires email to prevent creating
+    accounts that can't authenticate via email-based login."""
+    admin_user = _create_user("addreq_admin@test.com")
+    admin_user.role = UserRole.ADMIN
+    admin_user.is_staff = True
+    admin_user.is_superuser = True
+    admin_user.save(update_fields=["role", "is_staff", "is_superuser"])
+
+    client = Client()
+    client.force_login(admin_user)
+
+    # Submit add form without email
+    resp = client.post("/admin/accounts/user/add/", {
+        "username": "no_email_user",
+        "password1": "ValidPass123!",
+        "password2": "ValidPass123!",
+        "email": "",
+    })
+    # Should not redirect (302 = success), should show form errors
+    assert resp.status_code == 200  # form re-rendered with errors
