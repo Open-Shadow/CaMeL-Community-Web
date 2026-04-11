@@ -66,6 +66,11 @@ class UserAdmin(BaseUserAdmin):
         except ImportError:
             return
         if not user.email:
+            # Email was cleared — release all allauth addresses so the old
+            # verified row doesn't reserve the address via unique_verified_email.
+            EmailAddress.objects.filter(user=user).update(
+                primary=False, verified=False
+            )
             return
         # Demote existing primary addresses and clear their verified flag
         # BEFORE creating/updating the new one — allauth enforces a single
