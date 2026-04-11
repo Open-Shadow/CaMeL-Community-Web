@@ -605,9 +605,8 @@ def test_migration_0003_resolves_legacy_duplicate_emails():
         assert inactive_rows[0][1] != "user@example.com"
 
         # The constraint now rejects a new case-variant duplicate
-        import sqlite3
-        with conn.cursor() as cursor:
-            try:
+        with pytest.raises(IntegrityError):
+            with conn.cursor() as cursor:
                 cursor.execute(
                     "INSERT INTO accounts_user "
                     "(password, is_superuser, username, first_name, last_name, "
@@ -620,9 +619,6 @@ def test_migration_0003_resolves_legacy_duplicate_emails():
                     "'', '', '', 'USER', 'SEED', 0, 0, 0, "
                     "'2026-01-03 00:00:00', '2026-01-03 00:00:00')"
                 )
-                assert False, "Expected IntegrityError for case-variant duplicate"
-            except Exception:
-                pass  # Expected — constraint blocks the duplicate
 
     _run_migration_test(
         pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],
