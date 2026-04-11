@@ -361,6 +361,17 @@ def test_duplicate_email_different_case_rejected():
         )
 
 
+def test_blank_email_users_not_blocked_by_unique_constraint():
+    """Multiple users with blank email should not violate unique_email_ci."""
+    User.objects.create_user(
+        username="blank_email_1", email="", password="ValidPass123!",
+    )
+    User.objects.create_user(
+        username="blank_email_2", email="", password="ValidPass123!",
+    )
+    assert User.objects.filter(email="").count() == 2
+
+
 # ===========================================================================
 # AC-6: AUTH_PASSWORD_VALIDATORS
 # ===========================================================================
@@ -619,6 +630,70 @@ def test_migration_0003_resolves_legacy_duplicate_emails():
                     "'', '', '', 'USER', 'SEED', 0, 0, 0, "
                     "'2026-01-03 00:00:00', '2026-01-03 00:00:00')"
                 )
+
+    _run_migration_test(
+        pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],
+        post_migrate_target=[("accounts", "0003_add_email_uniqueness_and_manager")],
+        setup_fn=setup,
+        assert_fn=assertions,
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_0003_keeps_active_user_when_duplicate_has_null_last_login():
+    """Historical migration test: when duplicates exist and one has NULL
+    last_login while the other has a real last_login, the migration keeps
+    the one that actually logged in (not the NULL one)."""
+
+    def setup(conn):
+        with conn.cursor() as cursor:
+            # User with NULL last_login (never logged in)
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash1', 0, 'never_logged_in', '', '', "
+                "'dupe@example.com', 0, 1, '2026-01-01 00:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+            )
+            # User with real last_login (actually active)
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, last_login, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash2', 0, 'actually_active', '', '', "
+                "'DUPE@Example.COM', 0, 1, '2026-01-02 00:00:00', '2026-03-15 10:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-02 00:00:00', '2026-01-02 00:00:00')"
+            )
+
+    def assertions(conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT username, email, is_active FROM accounts_user "
+                "WHERE username IN ('never_logged_in', 'actually_active') "
+                "ORDER BY is_active DESC"
+            )
+            rows = cursor.fetchall()
+
+        active_rows = [r for r in rows if r[2]]
+        inactive_rows = [r for r in rows if not r[2]]
+
+        # The user who actually logged in should be kept
+        assert len(active_rows) == 1
+        assert active_rows[0][0] == "actually_active"
+        assert active_rows[0][1] == "dupe@example.com"
+
+        # The one who never logged in should be deactivated
+        assert len(inactive_rows) == 1
+        assert inactive_rows[0][0] == "never_logged_in"
 
     _run_migration_test(
         pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],

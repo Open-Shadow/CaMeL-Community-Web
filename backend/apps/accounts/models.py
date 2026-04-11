@@ -65,6 +65,7 @@ class User(AbstractUser):
             models.UniqueConstraint(
                 models.functions.Lower("email"),
                 name="unique_email_ci",
+                condition=~models.Q(email=""),
             ),
         ]
 

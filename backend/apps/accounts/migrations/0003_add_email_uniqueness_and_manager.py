@@ -27,7 +27,10 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     for entry in dupes:
         email = entry["email"]
         # Keep the most recently active; deactivate the rest
-        users = User.objects.filter(email=email).order_by("-last_login", "-date_joined")
+        from django.db.models import F
+        users = User.objects.filter(email=email).order_by(
+            F("last_login").desc(nulls_last=True), "-date_joined",
+        )
         keeper = users.first()
         for user in users[1:]:
             # Deactivate and mark email to avoid constraint violation
@@ -73,6 +76,7 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 django.db.models.functions.text.Lower('email'),
                 name='unique_email_ci',
+                condition=~models.Q(email=""),
             ),
         ),
     ]
