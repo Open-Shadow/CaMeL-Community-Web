@@ -157,6 +157,11 @@ class Command(BaseCommand):
             return
         if not user.email:
             return
+        # Clear any conflicting verified row on OTHER users so
+        # update_or_create doesn't hit allauth's unique_verified_email.
+        EmailAddress.objects.filter(
+            email=user.email, verified=True
+        ).exclude(user=user).update(verified=False)
         EmailAddress.objects.update_or_create(
             user=user,
             email=user.email,
@@ -184,6 +189,8 @@ class Command(BaseCommand):
         if set_password:
             fields.append("password")
         user.save(update_fields=fields)
+
+        self._sync_allauth_email(user)
 
         if was_admin:
             msg = f"User {user.email} is already admin (no changes)."
