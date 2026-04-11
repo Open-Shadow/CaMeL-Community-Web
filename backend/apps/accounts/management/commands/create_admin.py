@@ -56,6 +56,11 @@ class Command(BaseCommand):
         # No existing user — try to create. If a concurrent process
         # already inserted the same email, catch the IntegrityError
         # and fall through to the existing-user path.
+        if not password:
+            raise CommandError(
+                "No password provided and no existing user to promote. "
+                "Use --password or --from-env."
+            )
         try:
             with transaction.atomic():
                 self._create_new(email, password)
@@ -96,10 +101,10 @@ class Command(BaseCommand):
         password = options.get("password")
         if not password:
             if not sys.stdin.isatty():
-                raise CommandError(
-                    "No password provided and stdin is not interactive. "
-                    "Use --password or --from-env."
-                )
+                # Allow password-less invocation — it's only needed for new
+                # users or when --set-password is requested.  If the target
+                # user already exists, handle() will skip password usage.
+                return email, None
             import getpass
 
             password = getpass.getpass("Admin password: ")
@@ -146,6 +151,11 @@ class Command(BaseCommand):
         was_admin = user.role == UserRole.ADMIN
 
         if set_password:
+            if not password:
+                raise CommandError(
+                    "--set-password requires a password. "
+                    "Use --password or --from-env."
+                )
             self._validate_password(password, user=user)
             user.set_password(password)
 

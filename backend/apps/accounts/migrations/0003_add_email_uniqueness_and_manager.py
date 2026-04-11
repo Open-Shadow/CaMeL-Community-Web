@@ -43,8 +43,12 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
         for user in users[1:]:
             # Delete allauth EmailAddress rows for the duplicated email only
             # (preserve any unrelated secondary addresses the user may have).
+            # Use iexact because user emails are already lowered but
+            # EmailAddress rows may still have mixed case.
             if EmailAddress is not None:
-                EmailAddress.objects.filter(user_id=user.id, email=email).delete()
+                EmailAddress.objects.filter(
+                    user_id=user.id, email__iexact=email
+                ).delete()
             # Deactivate and mark email to avoid constraint violation.
             # Truncate to 254 chars (Django's email max_length).
             new_email = f"deactivated_{user.id}_{email}"
