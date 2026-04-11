@@ -469,3 +469,112 @@ def test_normal_user_blocked_from_finance_report():
         **_auth_header(user),
     )
     assert resp.status_code == 403
+
+
+# ===========================================================================
+# Regression: create_superuser forces ADMIN even with explicit override
+# ===========================================================================
+
+
+def test_create_superuser_forces_admin_role_even_when_overridden():
+    """create_superuser ignores explicit role=USER — always sets ADMIN."""
+    user = User.objects.create_superuser(
+        username="forced_admin",
+        email="forced@test.com",
+        password="ValidPass123!",
+        role=UserRole.USER,  # caller tries to override
+    )
+    assert user.role == UserRole.ADMIN
+    assert user.is_staff is True
+    assert user.is_superuser is True
+
+
+# ===========================================================================
+# Migration logic: data cleanup (0003 RunPython function)
+# ===========================================================================
+
+
+def test_migration_logic_normalizes_emails_and_resolves_duplicates():
+    """The migration cleanup function normalizes emails to lowercase.
+
+    Note: case-variant duplicate resolution cannot be tested in the test DB
+    because the unique_email_ci constraint is already applied (all migrations
+    run before tests). This test verifies the normalization path by inserting
+    a mixed-case email and confirming it gets lowercased.
+    The duplicate-deactivation code path is a safety net for production
+    migrations where the constraint hasn't been applied yet.
+    """
+    import importlib
+    mod = importlib.import_module(
+        "apps.accounts.migrations.0003_add_email_uniqueness_and_manager"
+    )
+    normalize_emails_and_repair_drift = mod.normalize_emails_and_repair_drift
+    from django.apps import apps
+
+    # Create a user with mixed-case email via raw SQL.
+    # SQLite stores the literal string but the unique index uses LOWER().
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO accounts_user "
+            "(password, is_superuser, username, first_name, last_name, "
+            "email, is_staff, is_active, date_joined, "
+            "display_name, bio, avatar_url, role, level, "
+            "credit_score, balance, frozen_balance, created_at, updated_at) "
+            "VALUES "
+            "('hash1', 0, 'mig_mixed', '', '', "
+            "'MixedCase@MigTest.COM', 0, 1, '2026-01-01 00:00:00', "
+            "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+            "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+        )
+
+    # Run the migration's RunPython function
+    normalize_emails_and_repair_drift(apps, None)
+
+    # Verify email was normalized to lowercase
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT email FROM accounts_user WHERE username = 'mig_mixed'"
+        )
+        row = cursor.fetchone()
+
+    assert row[0] == "mixedcase@migtest.com"
+
+
+def test_migration_logic_repairs_privilege_drift():
+    """The migration cleanup function syncs is_superuser=True users to ADMIN role."""
+    import importlib
+    mod = importlib.import_module(
+        "apps.accounts.migrations.0003_add_email_uniqueness_and_manager"
+    )
+    normalize_emails_and_repair_drift = mod.normalize_emails_and_repair_drift
+    from django.apps import apps
+
+    # Create a drifted user: is_superuser=True but role=USER
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO accounts_user "
+            "(password, is_superuser, username, first_name, last_name, "
+            "email, is_staff, is_active, date_joined, "
+            "display_name, bio, avatar_url, role, level, "
+            "credit_score, balance, frozen_balance, created_at, updated_at) "
+            "VALUES "
+            "('hash', 1, 'mig_drifted', '', '', "
+            "'mig_drifted@test.com', 0, 1, '2026-01-01 00:00:00', "
+            "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+            "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+        )
+
+    normalize_emails_and_repair_drift(apps, None)
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT role, is_staff, is_superuser FROM accounts_user "
+            "WHERE username = 'mig_drifted'"
+        )
+        row = cursor.fetchone()
+
+    assert row[0] == "ADMIN"
+    assert row[1] == 1  # is_staff
+    assert row[2] == 1  # is_superuser

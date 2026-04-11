@@ -20,7 +20,7 @@ class CamelUserManager(DjangoUserManager):
     """Custom manager that ensures create_superuser sets role=ADMIN."""
 
     def create_superuser(self, username, email=None, password=None, **extra_fields):
-        extra_fields.setdefault("role", UserRole.ADMIN)
+        extra_fields["role"] = UserRole.ADMIN
         return super().create_superuser(username, email, password, **extra_fields)
 
 
