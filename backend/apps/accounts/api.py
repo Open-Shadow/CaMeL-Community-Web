@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from ninja import Router, Schema
 from ninja.responses import Status
@@ -154,6 +154,8 @@ def register(request, data: RegisterInput):
             )
     except InvitationError as exc:
         return Status(400, {"message": str(exc)})
+    except IntegrityError:
+        return Status(400, {"message": "该邮箱已被注册"})
 
     AuthService.send_verification_email(request, user, signup=True)
 

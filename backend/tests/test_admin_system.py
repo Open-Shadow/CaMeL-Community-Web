@@ -877,6 +877,61 @@ def test_migration_0003_repairs_both_drift_directions():
     )
 
 
+@pytest.mark.django_db(transaction=True)
+def test_migration_0003_clears_is_staff_on_non_admin():
+    """Historical migration test: 0002->0003 clears is_staff on users
+    whose role is not ADMIN, preventing unauthorized /admin/ access."""
+
+    def setup(conn):
+        with conn.cursor() as cursor:
+            # USER with is_staff=True (should be cleared)
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash1', 0, 'staff_user', '', '', "
+                "'staffuser@test.com', 1, 1, '2026-01-01 00:00:00', "
+                "'', '', '', 'USER', 'SEED', 0, 0, 0, "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+            )
+            # MODERATOR with is_staff=True (should also be cleared)
+            cursor.execute(
+                "INSERT INTO accounts_user "
+                "(password, is_superuser, username, first_name, last_name, "
+                "email, is_staff, is_active, date_joined, "
+                "display_name, bio, avatar_url, role, level, "
+                "credit_score, balance, frozen_balance, created_at, updated_at) "
+                "VALUES "
+                "('hash2', 0, 'staff_mod', '', '', "
+                "'staffmod@test.com', 1, 1, '2026-01-01 00:00:00', "
+                "'', '', '', 'MODERATOR', 'SEED', 0, 0, 0, "
+                "'2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+            )
+
+    def assertions(conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT username, role, is_staff FROM accounts_user "
+                "WHERE username IN ('staff_user', 'staff_mod') "
+                "ORDER BY username"
+            )
+            rows = cursor.fetchall()
+
+        assert len(rows) == 2
+        for row in rows:
+            assert row[2] == 0, f"{row[0]} (role={row[1]}) should have is_staff=False"
+
+    _run_migration_test(
+        pre_migrate_target=[("accounts", "0002_invitation_risk_fields")],
+        post_migrate_target=[("accounts", "0003_add_email_uniqueness_and_manager")],
+        setup_fn=setup,
+        assert_fn=assertions,
+    )
+
+
 # ===========================================================================
 # Regression: create_admin race-safety (concurrent bootstrap)
 # ===========================================================================

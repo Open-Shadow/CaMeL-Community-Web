@@ -17,6 +17,13 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     from django.db.models.functions import Lower
     User.objects.update(email=Lower("email"))
 
+    # Also normalize allauth EmailAddress rows so they stay in sync
+    try:
+        EmailAddress = apps.get_model("account", "EmailAddress")
+        EmailAddress.objects.update(email=Lower("email"))
+    except LookupError:
+        pass  # allauth not installed
+
     # --- Step 2: Detect and resolve case-insensitive duplicates ---
     from django.db.models import Count
     dupes = (
@@ -50,6 +57,10 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     # role=ADMIN but is_superuser=False -> set is_superuser=True, is_staff=True
     User.objects.filter(role="ADMIN", is_superuser=False).update(
         is_superuser=True, is_staff=True
+    )
+    # is_staff=True but role!=ADMIN -> clear is_staff (no admin access for non-admins)
+    User.objects.filter(is_staff=True).exclude(role="ADMIN").update(
+        is_staff=False
     )
 
 
