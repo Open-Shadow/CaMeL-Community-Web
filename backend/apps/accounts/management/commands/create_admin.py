@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError, transaction
 
-from apps.accounts.models import UserRole, sync_admin_flags
+from apps.accounts.models import UserRole
 
 User = get_user_model()
 
@@ -180,13 +180,9 @@ class Command(BaseCommand):
         """Elevate an existing user to admin."""
         was_admin = user.role == UserRole.ADMIN
 
-        # Apply password when: (a) --set-password explicitly requested, or
-        # (b) promoting a non-admin and a password was provided.  Case (b)
-        # ensures first-time bootstrap applies ADMIN_PASSWORD without
-        # --set-password, while subsequent restarts (user is already admin)
-        # leave the current password untouched.
-        apply_password = set_password or (not was_admin and password)
-
+        # Resolve whether to apply a password:
+        # (a) --set-password explicitly requested, or
+        # (b) promoting a non-admin and a password was provided.
         if set_password and not password:
             password = self._prompt_password()
         if set_password and not password:
@@ -195,7 +191,8 @@ class Command(BaseCommand):
                 "Use --password or --from-env."
             )
 
-        if apply_password and password:
+        password_changed = bool(password) and (set_password or not was_admin)
+        if password_changed:
             self._validate_password(password, user=user)
             user.set_password(password)
 
@@ -205,16 +202,12 @@ class Command(BaseCommand):
 
         fields = ["role", "is_staff", "is_superuser"]
         if not was_admin:
-            # Reactivate when promoting a non-admin user so the new admin
-            # can actually log in.  Already-admin accounts that were
-            # intentionally suspended keep their is_active state.
             user.is_active = True
             fields.append("is_active")
-        if apply_password and password:
+        if password_changed:
             fields.append("password")
         user.save(update_fields=fields)
 
-        # Warn if the promoted admin has no usable password
         if not was_admin and not user.has_usable_password():
             self.stderr.write(
                 self.style.WARNING(
@@ -229,11 +222,10 @@ class Command(BaseCommand):
 
         if was_admin:
             msg = f"User {user.email} is already admin (no changes)."
-            if apply_password and password:
+            if password_changed:
                 msg = f"Admin {user.email} password has been reset."
-            self.stdout.write(self.style.SUCCESS(msg))
         else:
             msg = f"User {user.email} elevated to admin."
-            if apply_password and password:
+            if password_changed:
                 msg += " Password has been reset."
-            self.stdout.write(self.style.SUCCESS(msg))
+        self.stdout.write(self.style.SUCCESS(msg))

@@ -27,14 +27,11 @@ class UserAdmin(BaseUserAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if obj is None and "email" in form.base_fields:
-            form.base_fields["email"].required = True
-        if obj is not None and obj.email and "email" in form.base_fields:
-            # Prevent clearing email on users who already have one —
-            # this app authenticates by email, so blanking it locks them out.
-            # Legacy blank-email users are not affected (they have no email
-            # to protect).
-            form.base_fields["email"].required = True
+        # Require email on add forms (always) and change forms (when user
+        # already has one).  Legacy blank-email users are left editable.
+        if "email" in form.base_fields:
+            if obj is None or obj.email:
+                form.base_fields["email"].required = True
         if obj is not None and request is not None and obj.pk == request.user.pk:
             # Inject form-level validation to prevent self-role changes
             # and self-deactivation.  This surfaces as field errors
