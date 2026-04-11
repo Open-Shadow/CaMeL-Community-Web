@@ -162,6 +162,11 @@ class Command(BaseCommand):
         EmailAddress.objects.filter(
             email=user.email, verified=True
         ).exclude(user=user).update(verified=False)
+        # Demote all other EmailAddress rows for THIS user so the new
+        # primary doesn't collide with a stale primary row.
+        EmailAddress.objects.filter(user=user).exclude(
+            email=user.email
+        ).update(primary=False, verified=False)
         EmailAddress.objects.update_or_create(
             user=user,
             email=user.email,
