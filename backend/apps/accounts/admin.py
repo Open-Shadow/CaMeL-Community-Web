@@ -30,13 +30,11 @@ class UserAdmin(BaseUserAdmin):
         if obj is None and "email" in form.base_fields:
             form.base_fields["email"].required = True
         if obj is not None and request is not None and obj.pk == request.user.pk:
-            # Inject form-level validation to prevent self-role changes.
-            # This surfaces as a field error instead of a 500 from save_model.
-            original_clean_role = form.base_fields.get("role") and getattr(
-                form, "clean_role", None
-            )
+            # Inject form-level validation to prevent self-role changes
+            # and self-deactivation.  This surfaces as field errors
+            # instead of a silent lockout.
 
-            def _make_form_with_self_role_guard(form_class, user_pk):
+            def _make_form_with_self_edit_guard(form_class, user_pk):
                 class GuardedForm(form_class):
                     def clean_role(self):
                         new_role = self.cleaned_data.get("role")
@@ -46,9 +44,18 @@ class UserAdmin(BaseUserAdmin):
                                 "Ask another administrator to make this change."
                             )
                         return new_role
+
+                    def clean_is_active(self):
+                        new_active = self.cleaned_data.get("is_active")
+                        if self.instance.pk == user_pk and not new_active:
+                            raise ValidationError(
+                                "Cannot deactivate your own account. "
+                                "Ask another administrator to make this change."
+                            )
+                        return new_active
                 return GuardedForm
 
-            form = _make_form_with_self_role_guard(form, request.user.pk)
+            form = _make_form_with_self_edit_guard(form, request.user.pk)
         return form
 
     def save_model(self, request, obj, form, change):

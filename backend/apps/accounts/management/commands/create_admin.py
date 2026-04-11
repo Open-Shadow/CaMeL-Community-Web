@@ -57,6 +57,8 @@ class Command(BaseCommand):
         # already inserted the same email, catch the IntegrityError
         # and fall through to the existing-user path.
         if not password:
+            password = self._prompt_password()
+        if not password:
             raise CommandError(
                 "No password provided and no existing user to promote. "
                 "Use --password or --from-env."
@@ -99,20 +101,21 @@ class Command(BaseCommand):
             raise CommandError("--email is required (or use --from-env).")
 
         password = options.get("password")
-        if not password:
-            if not sys.stdin.isatty():
-                # Allow password-less invocation — it's only needed for new
-                # users or when --set-password is requested.  If the target
-                # user already exists, handle() will skip password usage.
-                return email, None
-            import getpass
-
-            password = getpass.getpass("Admin password: ")
-            password_confirm = getpass.getpass("Confirm password: ")
-            if password != password_confirm:
-                raise CommandError("Passwords do not match.")
-
+        # Defer interactive prompt — handle() will call _prompt_password()
+        # only when a password is actually needed (new user or --set-password).
         return email, password
+
+    def _prompt_password(self):
+        """Interactively prompt for a password if running in a TTY."""
+        if not sys.stdin.isatty():
+            return None
+        import getpass
+
+        password = getpass.getpass("Admin password: ")
+        password_confirm = getpass.getpass("Confirm password: ")
+        if password != password_confirm:
+            raise CommandError("Passwords do not match.")
+        return password
 
     def _validate_password(self, password, user=None):
         """Run Django password validators."""
@@ -184,6 +187,8 @@ class Command(BaseCommand):
         # leave the current password untouched.
         apply_password = set_password or (not was_admin and password)
 
+        if set_password and not password:
+            password = self._prompt_password()
         if set_password and not password:
             raise CommandError(
                 "--set-password requires a password. "
