@@ -1194,30 +1194,44 @@ def test_create_admin_does_not_reactivate_suspended_admin():
 
 def test_admin_cannot_change_own_role():
     """An admin cannot change their own role via Django admin,
-    preventing accidental self-lockout."""
-    from apps.accounts.admin import UserAdmin as CamelUserAdmin
-    from django.contrib.admin.sites import AdminSite
-
+    preventing accidental self-lockout.  The error surfaces as a
+    form validation error (200 with error message), not a 500."""
     admin_user = _create_user("selflock@test.com")
     admin_user.role = UserRole.ADMIN
     admin_user.is_staff = True
     admin_user.is_superuser = True
     admin_user.save(update_fields=["role", "is_staff", "is_superuser"])
 
-    site = AdminSite()
-    ma = CamelUserAdmin(User, site)
+    client = Client()
+    client.force_login(admin_user)
 
-    class FakeRequest:
-        user = admin_user
+    # GET the change form to collect initial field values
+    change_url = f"/admin/accounts/user/{admin_user.id}/change/"
+    get_resp = client.get(change_url)
+    assert get_resp.status_code == 200
 
-    class FakeForm:
-        changed_data = ["role"]
+    # POST with role changed to USER (all other required fields kept)
+    post_data = {
+        "username": admin_user.username,
+        "email": admin_user.email,
+        "role": "USER",  # attempting to demote self
+        "level": admin_user.level,
+        "credit_score": str(admin_user.credit_score),
+        "balance": str(admin_user.balance),
+        "frozen_balance": str(admin_user.frozen_balance),
+        "date_joined_0": admin_user.date_joined.strftime("%Y-%m-%d"),
+        "date_joined_1": admin_user.date_joined.strftime("%H:%M:%S"),
+        "initial-password": "",
+        "_save": "Save",
+    }
+    resp = client.post(change_url, post_data)
+    # Should re-render the form with errors (200), not redirect (302)
+    assert resp.status_code == 200
+    assert "Cannot change your own role" in resp.content.decode()
 
-    admin_user.role = UserRole.USER  # attempt to demote self
-    with pytest.raises(ValidationError, match="Cannot change your own role"):
-        ma.save_model(
-            request=FakeRequest(), obj=admin_user, form=FakeForm(), change=True
-        )
+    # Verify role was NOT actually changed
+    admin_user.refresh_from_db()
+    assert admin_user.role == UserRole.ADMIN
 
 
 def test_admin_add_form_requires_email():

@@ -13,41 +13,50 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     """
     User = apps.get_model("accounts", "User")
 
-    # --- Step 1: Normalize emails to lowercase ---
+    # --- Step 1: Normalize user emails to lowercase ---
     from django.db.models.functions import Lower
     User.objects.update(email=Lower("email"))
 
-    # Also normalize allauth EmailAddress rows so they stay in sync
-    try:
-        EmailAddress = apps.get_model("account", "EmailAddress")
-        EmailAddress.objects.update(email=Lower("email"))
-    except LookupError:
-        pass  # allauth not installed
-
     # --- Step 2: Detect and resolve case-insensitive duplicates ---
-    from django.db.models import Count
+    from django.db.models import Count, F
     dupes = (
         User.objects.exclude(email="")
         .values("email")
         .annotate(cnt=Count("id"))
         .filter(cnt__gt=1)
     )
+
+    # Resolve allauth EmailAddress model once (may not be installed)
+    try:
+        EmailAddress = apps.get_model("account", "EmailAddress")
+    except LookupError:
+        EmailAddress = None
+
     for entry in dupes:
         email = entry["email"]
         # Keep the most recently active; deactivate the rest
-        from django.db.models import F
         users = User.objects.filter(email=email).order_by(
             "-is_active",
             F("last_login").desc(nulls_last=True), "-date_joined",
         )
         keeper = users.first()
         for user in users[1:]:
+            # Delete stale allauth EmailAddress rows for the discarded user
+            # so they don't block the keeper from verifying this email.
+            if EmailAddress is not None:
+                EmailAddress.objects.filter(user_id=user.id).delete()
             # Deactivate and mark email to avoid constraint violation.
             # Truncate to 254 chars (Django's email max_length).
             new_email = f"deactivated_{user.id}_{email}"
             user.is_active = False
             user.email = new_email[:254]
             user.save(update_fields=["is_active", "email"])
+
+    # --- Step 2b: Normalize allauth EmailAddress emails AFTER duplicates ---
+    # Must run after duplicate cleanup so that lowering doesn't collide
+    # with allauth's own uniqueness constraints on case-variant rows.
+    if EmailAddress is not None:
+        EmailAddress.objects.update(email=Lower("email"))
 
     # --- Step 3: Repair privilege drift ---
     # is_superuser=True but role!=ADMIN -> set role=ADMIN, is_staff=True
