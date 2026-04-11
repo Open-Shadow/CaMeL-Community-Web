@@ -20,7 +20,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import Client
 
 from apps.accounts.models import User, UserRole, sync_admin_flags
@@ -700,24 +700,78 @@ def test_migration_0003_repairs_both_drift_directions():
 # ===========================================================================
 
 
+@pytest.mark.django_db(transaction=True)
 def test_create_admin_race_loser_converges_instead_of_error():
     """When a concurrent process creates the same email between
     count==0 and create_user, the loser converges on the existing
-    row instead of raising CommandError."""
-    # Pre-create the user to simulate the race winner
-    _create_user("racewin@test.com", "ValidPass123!")
+    row instead of raising CommandError.
 
-    # The loser process calls create_admin and finds count==0
-    # but _create_new hits IntegrityError. It should recover
-    # by elevating the existing user.
-    out = StringIO()
-    call_command(
-        "create_admin",
+    Simulates the race deterministically:
+    - Pre-creates the user (the "race winner")
+    - Patches the initial filter().count() to return 0 (loser sees no row)
+    - Patches _create_new to raise IntegrityError (loser's insert collides)
+    - The recovery branch (lines 66-69) re-fetches and elevates the real user
+    """
+    from apps.accounts.management.commands.create_admin import Command
+
+    # The "race winner" has already committed this user
+    user = User.objects.create_user(
+        username="race_winner",
         email="racewin@test.com",
         password="ValidPass123!",
-        stdout=out,
+        display_name="race",
     )
-    user = User.objects.get(email="racewin@test.com")
+    assert user.role == UserRole.USER  # starts as regular user
+
+    original_filter = User.objects.select_for_update().filter
+
+    call_count = {"n": 0}
+
+    def fake_filter(**kwargs):
+        """First call returns empty queryset (simulating race window),
+        subsequent calls return real results."""
+        call_count["n"] += 1
+        qs = User.objects.filter(**kwargs)
+        if call_count["n"] == 1:
+            # Loser's initial check sees no user
+            return qs.none()
+        return User.objects.select_for_update().filter(**kwargs)
+
+    with mock.patch.object(
+        Command, "_create_new",
+        side_effect=IntegrityError("UNIQUE constraint failed: unique_email_ci"),
+    ), mock.patch(
+        "apps.accounts.management.commands.create_admin.User.objects",
+        wraps=User.objects,
+    ) as mock_objects:
+        # Override the chained select_for_update().filter() for the first call
+        real_sfu = User.objects.select_for_update
+
+        def patched_sfu():
+            sfu_qs = real_sfu()
+            original_sfu_filter = sfu_qs.filter
+
+            def sfu_filter(**kwargs):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    return User.objects.none()
+                return original_sfu_filter(**kwargs)
+
+            sfu_qs.filter = sfu_filter
+            return sfu_qs
+
+        mock_objects.select_for_update = patched_sfu
+
+        out = StringIO()
+        call_command(
+            "create_admin",
+            email="racewin@test.com",
+            password="ValidPass123!",
+            stdout=out,
+        )
+
+    # The recovery path should have elevated the race winner's row
+    user.refresh_from_db()
     assert user.role == UserRole.ADMIN
     assert user.is_staff is True
     assert user.is_superuser is True
