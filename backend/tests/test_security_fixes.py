@@ -542,6 +542,94 @@ def test_admin_finalize_rejects_contradictory_result_on_appeal():
     assert bounty.status == "DISPUTED"
 
 
+def test_admin_finalize_rejects_contradictory_partial_ratio():
+    """After community arbitration settled as PARTIAL with ratio 0.400,
+    admin cannot finalize with a different ratio (e.g. 0.900).
+    Funds were already distributed at the original ratio."""
+    from apps.bounties.services import BountyService, BountyError
+    from apps.bounties.models import Bounty, Arbitration
+    from django.utils import timezone
+    import datetime
+
+    creator = _create_user("partial-c@test.com", balance=Decimal("0.00"), frozen_balance=Decimal("10.00"))
+    hunter = _create_user("partial-h@test.com", balance=Decimal("4.00"))
+    admin = _create_user("partial-admin@test.com", role="ADMIN")
+
+    bounty = Bounty.objects.create(
+        title="Partial Bounty",
+        description="Test",
+        creator=creator,
+        reward=Decimal("10.00"),
+        bounty_type="GENERAL",
+        deadline=timezone.now() + datetime.timedelta(days=7),
+        status="DISPUTED",
+    )
+
+    Arbitration.objects.create(
+        bounty=bounty,
+        creator_statement="Creator's case",
+        hunter_statement="Hunter's case",
+        resolved_at=timezone.now(),
+        result="PARTIAL",
+        hunter_ratio=Decimal("0.400"),
+        appeal_by=creator,
+        appeal_fee_paid=True,
+    )
+
+    with pytest.raises(BountyError, match="无法变更"):
+        BountyService.admin_finalize(admin, bounty, "PARTIAL", hunter_ratio=0.9)
+
+    bounty.refresh_from_db()
+    assert bounty.status == "DISPUTED"
+
+
+def test_admin_finalize_accepts_matching_partial_ratio():
+    """After community arbitration settled as PARTIAL with ratio 0.400,
+    admin can confirm by finalizing with the same ratio.
+    Bounty should be restored to COMPLETED without moving funds."""
+    from apps.bounties.services import BountyService
+    from apps.bounties.models import Bounty, Arbitration
+    from django.utils import timezone
+    import datetime
+
+    creator = _create_user("partial-ok-c@test.com", balance=Decimal("0.00"), frozen_balance=Decimal("6.00"))
+    hunter = _create_user("partial-ok-h@test.com", balance=Decimal("4.00"))
+    admin = _create_user("partial-ok-admin@test.com", role="ADMIN")
+
+    bounty = Bounty.objects.create(
+        title="Partial OK Bounty",
+        description="Test",
+        creator=creator,
+        reward=Decimal("10.00"),
+        bounty_type="GENERAL",
+        deadline=timezone.now() + datetime.timedelta(days=7),
+        status="DISPUTED",
+    )
+
+    Arbitration.objects.create(
+        bounty=bounty,
+        creator_statement="Creator's case",
+        hunter_statement="Hunter's case",
+        resolved_at=timezone.now(),
+        result="PARTIAL",
+        hunter_ratio=Decimal("0.400"),
+        appeal_by=creator,
+        appeal_fee_paid=True,
+    )
+
+    result_arb = BountyService.admin_finalize(admin, bounty, "PARTIAL", hunter_ratio=0.4)
+    assert result_arb.admin_final_result == "PARTIAL"
+
+    bounty.refresh_from_db()
+    assert bounty.status == "COMPLETED"
+
+    # Verify no fund movement
+    creator.refresh_from_db()
+    hunter.refresh_from_db()
+    assert creator.frozen_balance == Decimal("6.00")
+    assert hunter.balance == Decimal("4.00")
+
+
 # ===========================================================================
 # Workshop: inactive user stale token denied draft article access (API-level)
 # ===========================================================================

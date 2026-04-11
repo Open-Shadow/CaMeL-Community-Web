@@ -445,6 +445,14 @@ class BountyService:
                     f"仲裁资金已按 {arbitration.result} 结果分配，"
                     f"无法改判为 {result}，如需变更请先撤销原结算"
                 )
+            if result == "PARTIAL":
+                requested_ratio = quantize_amount(hunter_ratio or 0)
+                settled_ratio = arbitration.hunter_ratio or Decimal("0")
+                if requested_ratio != settled_ratio:
+                    raise BountyError(
+                        f"仲裁资金已按比例 {settled_ratio} 分配，"
+                        f"无法变更为 {requested_ratio}，如需变更请先撤销原结算"
+                    )
             arbitration.admin_final_result = result
             arbitration.save(update_fields=["admin_final_result"])
             # Restore bounty to correct terminal status based on the
