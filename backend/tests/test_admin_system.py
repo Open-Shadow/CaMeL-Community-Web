@@ -1083,3 +1083,48 @@ def test_admin_role_change_syncs_auth_flags():
     target_user.refresh_from_db()
     assert target_user.is_staff is False
     assert target_user.is_superuser is False
+
+
+def test_admin_save_overrides_manual_flag_edits():
+    """Even if someone edits is_staff/is_superuser checkboxes without
+    changing role, save_model corrects the flags to match the role."""
+    from apps.accounts.admin import UserAdmin as CamelUserAdmin
+    from django.contrib.admin.sites import AdminSite
+
+    target_user = _create_user("flagdrift@test.com")
+    assert target_user.role == UserRole.USER
+
+    site = AdminSite()
+    ma = CamelUserAdmin(User, site)
+
+    class FakeForm:
+        changed_data = ["is_staff"]
+
+    # Manually set is_staff=True on a USER — save_model should revert it
+    target_user.is_staff = True
+    ma.save_model(request=None, obj=target_user, form=FakeForm(), change=True)
+    target_user.refresh_from_db()
+    assert target_user.is_staff is False
+    assert target_user.is_superuser is False
+
+
+def test_create_admin_does_not_reactivate_suspended_admin():
+    """Running create_admin on an intentionally disabled admin account
+    should not silently reactivate it."""
+    user = _create_user("suspended@test.com")
+    user.role = UserRole.ADMIN
+    user.is_staff = True
+    user.is_superuser = True
+    user.is_active = False
+    user.save(update_fields=["role", "is_staff", "is_superuser", "is_active"])
+
+    out = StringIO()
+    call_command(
+        "create_admin",
+        email="suspended@test.com",
+        password="ValidPass123!",
+        stdout=out,
+    )
+    user.refresh_from_db()
+    assert user.role == UserRole.ADMIN
+    assert user.is_active is False  # must stay disabled

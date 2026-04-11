@@ -26,5 +26,5 @@ class UserAdmin(BaseUserAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        if change and "role" in form.changed_data:
+        if change:
             sync_admin_flags(obj)
