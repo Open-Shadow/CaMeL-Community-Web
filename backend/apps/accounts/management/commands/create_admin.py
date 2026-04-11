@@ -38,25 +38,35 @@ class Command(BaseCommand):
         if not email:
             raise CommandError("Email cannot be empty.")
 
+        with transaction.atomic():
+            existing = User.objects.select_for_update().filter(email=email)
+            count = existing.count()
+
+            if count > 1:
+                raise CommandError(
+                    f"Multiple users found with email '{email}'. "
+                    "Please resolve duplicates manually."
+                )
+
+            if count == 1:
+                user = existing.get()
+                self._elevate_existing(user, password, options["set_password"])
+                return
+
+        # No existing user — try to create. If a concurrent process
+        # already inserted the same email, catch the IntegrityError
+        # and fall through to the existing-user path.
         try:
             with transaction.atomic():
-                existing = User.objects.filter(email=email)
-                count = existing.count()
+                self._create_new(email, password)
+                return
+        except IntegrityError:
+            pass
 
-                if count > 1:
-                    raise CommandError(
-                        f"Multiple users found with email '{email}'. "
-                        "Please resolve duplicates manually."
-                    )
-
-                if count == 1:
-                    user = existing.select_for_update().get()
-                    self._elevate_existing(user, password, options["set_password"])
-                else:
-                    self._create_new(email, password)
-
-        except IntegrityError as e:
-            raise CommandError(f"Database error: {e}")
+        # Race loser: the row now exists — elevate it.
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(email=email)
+            self._elevate_existing(user, password, options["set_password"])
 
     def _resolve_credentials(self, options):
         """Resolve email and password from CLI args or environment."""

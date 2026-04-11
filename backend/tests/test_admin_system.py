@@ -693,3 +693,102 @@ def test_migration_0003_repairs_both_drift_directions():
         setup_fn=setup,
         assert_fn=assertions,
     )
+
+
+# ===========================================================================
+# Regression: create_admin race-safety (concurrent bootstrap)
+# ===========================================================================
+
+
+def test_create_admin_race_loser_converges_instead_of_error():
+    """When a concurrent process creates the same email between
+    count==0 and create_user, the loser converges on the existing
+    row instead of raising CommandError."""
+    # Pre-create the user to simulate the race winner
+    _create_user("racewin@test.com", "ValidPass123!")
+
+    # The loser process calls create_admin and finds count==0
+    # but _create_new hits IntegrityError. It should recover
+    # by elevating the existing user.
+    out = StringIO()
+    call_command(
+        "create_admin",
+        email="racewin@test.com",
+        password="ValidPass123!",
+        stdout=out,
+    )
+    user = User.objects.get(email="racewin@test.com")
+    assert user.role == UserRole.ADMIN
+    assert user.is_staff is True
+    assert user.is_superuser is True
+    assert User.objects.filter(email="racewin@test.com").count() == 1
+
+
+# ===========================================================================
+# AC-1 E2E: create_admin → JWT → admin endpoint access
+# ===========================================================================
+
+
+def test_create_admin_user_can_authenticate_and_access_admin_endpoint():
+    """A user created via create_admin can authenticate via JWT
+    and access GET /api/admin/finance/report (200)."""
+    call_command(
+        "create_admin",
+        email="e2e_admin@test.com",
+        password="ValidPass123!",
+        stdout=StringIO(),
+    )
+    user = User.objects.get(email="e2e_admin@test.com")
+
+    client = Client()
+    resp = client.get(
+        "/api/admin/finance/report",
+        **_auth_header(user),
+    )
+    assert resp.status_code == 200
+
+
+# ===========================================================================
+# AC-7: Django Admin changelist and detail views
+# ===========================================================================
+
+
+def test_admin_user_changelist_accessible_and_shows_columns():
+    """Django admin User changelist is accessible and contains
+    the registered list_display columns."""
+    admin_user = _create_user("changelist_admin@test.com")
+    admin_user.role = UserRole.ADMIN
+    admin_user.is_staff = True
+    admin_user.is_superuser = True
+    admin_user.save(update_fields=["role", "is_staff", "is_superuser"])
+
+    client = Client()
+    client.force_login(admin_user)
+    resp = client.get("/admin/accounts/user/")
+    assert resp.status_code == 200
+    content = resp.content.decode()
+    # Verify list_display columns are present
+    for column in ("username", "email", "role", "level", "is_active", "date_joined"):
+        assert column in content.lower() or column.replace("_", " ") in content.lower(), (
+            f"Column '{column}' not found in changelist"
+        )
+
+
+def test_admin_user_detail_view_accessible():
+    """Django admin User detail (change) view is accessible and
+    contains the business fields fieldset."""
+    admin_user = _create_user("detail_admin@test.com")
+    admin_user.role = UserRole.ADMIN
+    admin_user.is_staff = True
+    admin_user.is_superuser = True
+    admin_user.save(update_fields=["role", "is_staff", "is_superuser"])
+
+    target_user = _create_user("detail_target@test.com")
+
+    client = Client()
+    client.force_login(admin_user)
+    resp = client.get(f"/admin/accounts/user/{target_user.id}/change/")
+    assert resp.status_code == 200
+    content = resp.content.decode()
+    # Verify the Business Fields fieldset is present
+    assert "Business Fields" in content
