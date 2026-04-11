@@ -55,3 +55,26 @@ class UserAdmin(BaseUserAdmin):
         super().save_model(request, obj, form, change)
         if change:
             sync_admin_flags(obj)
+            if "email" in form.changed_data:
+                self._sync_allauth_email(obj)
+
+    @staticmethod
+    def _sync_allauth_email(user):
+        """Keep allauth EmailAddress in sync after an admin email change."""
+        try:
+            from allauth.account.models import EmailAddress
+        except ImportError:
+            return
+        if not user.email:
+            return
+        # Ensure a primary, verified EmailAddress row exists for the new email.
+        # Admin-set emails are treated as verified (admin explicitly chose it).
+        EmailAddress.objects.update_or_create(
+            user=user,
+            email=user.email,
+            defaults={"primary": True, "verified": True},
+        )
+        # Demote any other addresses from primary
+        EmailAddress.objects.filter(user=user, primary=True).exclude(
+            email=user.email
+        ).update(primary=False)

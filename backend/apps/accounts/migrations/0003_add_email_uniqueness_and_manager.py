@@ -13,9 +13,9 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     """
     User = apps.get_model("accounts", "User")
 
-    # --- Step 1: Normalize user emails to lowercase ---
-    from django.db.models.functions import Lower
-    User.objects.update(email=Lower("email"))
+    # --- Step 1: Normalize user emails (strip whitespace + lowercase) ---
+    from django.db.models.functions import Lower, Trim
+    User.objects.update(email=Lower(Trim("email")))
 
     # --- Step 2: Detect and resolve case-insensitive duplicates ---
     from django.db.models import Count, F
@@ -41,10 +41,10 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
         )
         keeper = users.first()
         for user in users[1:]:
-            # Delete stale allauth EmailAddress rows for the discarded user
-            # so they don't block the keeper from verifying this email.
+            # Delete allauth EmailAddress rows for the duplicated email only
+            # (preserve any unrelated secondary addresses the user may have).
             if EmailAddress is not None:
-                EmailAddress.objects.filter(user_id=user.id).delete()
+                EmailAddress.objects.filter(user_id=user.id, email=email).delete()
             # Deactivate and mark email to avoid constraint violation.
             # Truncate to 254 chars (Django's email max_length).
             new_email = f"deactivated_{user.id}_{email}"
@@ -56,7 +56,7 @@ def normalize_emails_and_repair_drift(apps, schema_editor):
     # Must run after duplicate cleanup so that lowering doesn't collide
     # with allauth's own uniqueness constraints on case-variant rows.
     if EmailAddress is not None:
-        EmailAddress.objects.update(email=Lower("email"))
+        EmailAddress.objects.update(email=Lower(Trim("email")))
 
     # --- Step 3: Repair privilege drift ---
     # is_superuser=True but role!=ADMIN -> set role=ADMIN, is_staff=True
