@@ -1,6 +1,7 @@
 """Authentication API routes using django-allauth and JWT."""
 import uuid
 
+import jwt as pyjwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -303,3 +304,63 @@ def social_exchange(request, data: SocialExchangeInput):
     except ValidationError as exc:
         return Status(400, {"message": exc.messages[0]})
     return Status(200, get_tokens_for_user(user))
+
+
+# =============================================================================
+# SSO (CaMeL-api main site integration)
+# =============================================================================
+
+class SSOCallbackInput(Schema):
+    token: str
+
+
+@router.post("/sso/callback", response={200: TokenOutput, 400: MessageOutput})
+def sso_callback(request, data: SSOCallbackInput):
+    """Exchange a CaMeL-api SSO token for Community JWT tokens."""
+    sso_secret = getattr(settings, "CAMEL_SSO_SECRET", "")
+    if not sso_secret:
+        return Status(400, {"message": "SSO 未配置"})
+
+    try:
+        payload = pyjwt.decode(
+            data.token,
+            sso_secret,
+            algorithms=["HS256"],
+            issuer="camel-api",
+        )
+    except pyjwt.ExpiredSignatureError:
+        return Status(400, {"message": "SSO 令牌已过期"})
+    except pyjwt.InvalidTokenError:
+        return Status(400, {"message": "无效的 SSO 令牌"})
+
+    camel_user_id = payload.get("user_id")
+    username = payload.get("username", "")
+    email = payload.get("email", "")
+    display_name = payload.get("display_name", "")
+
+    if not camel_user_id:
+        return Status(400, {"message": "SSO 令牌缺少用户信息"})
+
+    with transaction.atomic():
+        # Try to find existing user by email first, then by sso identifier
+        user = None
+        if email:
+            user = User.objects.filter(email__iexact=email.strip().lower()).first()
+
+        if user is None:
+            # Create new user from SSO data
+            user = User.objects.create_user(
+                username=f"camel_{camel_user_id}_{uuid.uuid4().hex[:8]}",
+                email=email.strip().lower() if email else f"camel_{camel_user_id}@sso.local",
+                password=None,
+                display_name=display_name or username or f"CaMeL User {camel_user_id}",
+            )
+            CreditService.add_credit(
+                user,
+                CreditAction.REGISTER,
+                reference_id=f"sso-register:{user.id}",
+                idempotency_key=f"sso-register:{user.id}",
+            )
+
+    tokens = get_tokens_for_user(user)
+    return Status(200, tokens)

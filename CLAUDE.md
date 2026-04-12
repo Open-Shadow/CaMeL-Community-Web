@@ -309,6 +309,34 @@ admin_required      # 需要管理员角色
 
 ## 本地开发启动
 
+### 方式一：Docker 一键启动（推荐）
+
+```bash
+# 一键启动全部服务（PG + Redis + Meilisearch + Django + Celery + React）
+docker compose -f docker-compose.dev.yml up --build
+
+# 后台运行
+docker compose -f docker-compose.dev.yml up -d --build
+
+# 查看日志
+docker compose -f docker-compose.dev.yml logs -f backend
+docker compose -f docker-compose.dev.yml logs -f frontend
+
+# 停止
+docker compose -f docker-compose.dev.yml down
+
+# 清除数据重来
+docker compose -f docker-compose.dev.yml down -v
+```
+
+访问地址：
+- 前端：http://localhost:5173
+- 后端 API 文档：http://localhost:8000/api/docs
+
+源码通过 bind mount 挂载，Django 和 Vite 均支持热重载。
+
+### 方式二：原生启动（需本地安装 uv + pnpm）
+
 ```bash
 # ─── 后端 ───
 
@@ -342,6 +370,18 @@ cp .env.example .env.local
 
 # 9. 启动前端开发服务器
 pnpm dev
+```
+
+### 生产部署（Docker Compose）
+
+详见 [`deploy/README.md`](deploy/README.md)。
+
+```bash
+cd deploy
+cp .env.example .env
+cp backend.prod.env.example backend.prod.env
+# 编辑密码和域名...
+docker compose --env-file .env -f docker-compose.prod.yml up -d --build
 ```
 
 ---

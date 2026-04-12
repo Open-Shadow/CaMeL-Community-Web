@@ -223,6 +223,9 @@ FRONTEND_SOCIAL_CALLBACK_URL = config(
     default=f'{FRONTEND_URL}/auth/social/callback',
 )
 
+# SSO integration with CaMeL-api main site
+CAMEL_SSO_SECRET = config('CAMEL_SSO_SECRET', default='')
+
 # django-allauth
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']

@@ -8,6 +8,7 @@ import { OAuthCallbackPage } from '@/pages/auth/oauth-callback'
 import { ForgotPasswordPage } from '@/pages/auth/forgot-password'
 import { ResetPasswordPage } from '@/pages/auth/reset-password'
 import { SocialCallbackPage } from '@/pages/auth/social-callback'
+import { SSOCallbackPage } from '@/pages/auth/sso-callback'
 import { VerifyEmailPage } from '@/pages/auth/verify-email'
 import MarketplacePage from '@/pages/marketplace/MarketplacePage'
 import SkillDetailPage from '@/pages/marketplace/SkillDetailPage'
@@ -48,6 +49,7 @@ export const router = createBrowserRouter([
       { path: 'register', element: <RegisterPage /> },
       { path: 'auth/callback/:provider', element: <OAuthCallbackPage /> },
       { path: 'auth/social/callback', element: <SocialCallbackPage /> },
+      { path: 'auth/sso/callback', element: <SSOCallbackPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
       { path: 'reset-password', element: <ResetPasswordPage /> },
       { path: 'reset-password/:uid/:token', element: <ResetPasswordPage /> },
