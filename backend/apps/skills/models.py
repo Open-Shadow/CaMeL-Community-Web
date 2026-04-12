@@ -5,7 +5,7 @@ from apps.accounts.models import User
 
 class SkillStatus(models.TextChoices):
     DRAFT = "DRAFT", "草稿"
-    PENDING_REVIEW = "PENDING_REVIEW", "待审核"
+    SCANNING = "SCANNING", "扫描中"
     APPROVED = "APPROVED", "已上架"
     REJECTED = "REJECTED", "已拒绝"
     ARCHIVED = "ARCHIVED", "已归档"
@@ -25,7 +25,21 @@ class SkillCategory(models.TextChoices):
 
 class PricingModel(models.TextChoices):
     FREE = "FREE", "免费"
-    PER_USE = "PER_USE", "按次付费"
+    PAID = "PAID", "付费"
+
+
+class VersionStatus(models.TextChoices):
+    SCANNING = "SCANNING", "扫描中"
+    APPROVED = "APPROVED", "已通过"
+    REJECTED = "REJECTED", "已拒绝"
+    ARCHIVED = "ARCHIVED", "已归档"
+
+
+class ReportReason(models.TextChoices):
+    MALICIOUS_CODE = "MALICIOUS_CODE", "恶意代码"
+    FALSE_DESCRIPTION = "FALSE_DESCRIPTION", "虚假描述"
+    COPYRIGHT = "COPYRIGHT", "侵权"
+    OTHER = "OTHER", "其他"
 
 
 class Skill(models.Model):
@@ -33,19 +47,10 @@ class Skill(models.Model):
     name = models.CharField(max_length=80)
     slug = models.SlugField(max_length=100, unique=True)
     description = models.CharField(max_length=500)
-    system_prompt = models.TextField()
-    user_prompt_template = models.TextField(blank=True)
-    output_format = models.CharField(
-        max_length=20,
-        choices=[("text", "文本"), ("json", "JSON"), ("markdown", "Markdown"), ("code", "代码")],
-        default="text",
-    )
-    example_input = models.TextField(blank=True)
-    example_output = models.TextField(blank=True)
     category = models.CharField(max_length=30, choices=SkillCategory.choices)
     tags = ArrayField(models.CharField(max_length=50), default=list, size=10)
     pricing_model = models.CharField(max_length=10, choices=PricingModel.choices, default=PricingModel.FREE)
-    price_per_use = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    price = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SkillStatus.choices, default=SkillStatus.DRAFT)
     is_featured = models.BooleanField(default=False)
     current_version = models.IntegerField(default=1)
@@ -53,6 +58,12 @@ class Skill(models.Model):
     avg_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     review_count = models.IntegerField(default=0)
     rejection_reason = models.TextField(blank=True)
+    # Package fields
+    package_file = models.FileField(upload_to="skill_packages/%Y/%m/", blank=True)
+    package_sha256 = models.CharField(max_length=64, blank=True)
+    package_size = models.IntegerField(default=0)
+    readme_html = models.TextField(blank=True)
+    download_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -66,11 +77,13 @@ class Skill(models.Model):
 
 class SkillVersion(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="versions")
-    version = models.IntegerField()
-    system_prompt = models.TextField()
-    user_prompt_template = models.TextField(blank=True)
-    change_note = models.CharField(max_length=200, blank=True)
-    is_major = models.BooleanField(default=False)
+    version = models.CharField(max_length=20)
+    package_file = models.FileField(upload_to="skill_packages/%Y/%m/")
+    package_sha256 = models.CharField(max_length=64)
+    changelog = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20, choices=VersionStatus.choices, default=VersionStatus.SCANNING,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -81,10 +94,9 @@ class SkillVersion(models.Model):
 class SkillCall(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="calls")
     caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_calls")
-    skill_version = models.IntegerField()
+    skill_version = models.CharField(max_length=20)
     input_text = models.TextField()
     output_text = models.TextField(blank=True)
-    amount_charged = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     duration_ms = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -110,7 +122,7 @@ class SkillReview(models.Model):
 class SkillUsagePreference(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="usage_preferences")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_usage_preferences")
-    locked_version = models.IntegerField(null=True, blank=True)
+    locked_version = models.CharField(max_length=20, blank=True, default="")
     auto_follow_latest = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -118,3 +130,27 @@ class SkillUsagePreference(models.Model):
     class Meta:
         db_table = "skills_skill_usage_preference"
         unique_together = ("skill", "user")
+
+
+class SkillPurchase(models.Model):
+    skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="purchases")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_purchases")
+    paid_amount = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    payment_type = models.CharField(max_length=10)  # FREE | MONEY
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "skills_skill_purchase"
+        unique_together = ("skill", "user")
+
+
+class SkillReport(models.Model):
+    skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="reports")
+    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_reports")
+    reason = models.CharField(max_length=30, choices=ReportReason.choices)
+    detail = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "skills_skill_report"
+        unique_together = ("skill", "reporter")

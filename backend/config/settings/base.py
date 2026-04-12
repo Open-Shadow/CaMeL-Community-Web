@@ -49,6 +49,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'ninja.compatibility.files.fix_request_files_middleware',
 ]
 
 ROOT_URLCONF = 'config.urls'

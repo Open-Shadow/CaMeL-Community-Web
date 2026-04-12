@@ -11,19 +11,16 @@ class SearchSkillOut(Schema):
     name: str
     slug: str
     description: str
-    system_prompt: str
-    user_prompt_template: str
-    output_format: str
-    example_input: str
-    example_output: str
     category: str
     tags: list[str]
     pricing_model: str
-    price_per_use: float | None = None
+    price: float | None = None
     status: str
     is_featured: bool
     current_version: int
     rejection_reason: str
+    readme_html: str
+    download_count: int
     creator_id: int
     creator_name: str
     created_at: str
@@ -53,7 +50,7 @@ class SearchArticleRelatedSkillOut(Schema):
     name: str
     category: str
     pricing_model: str
-    price_per_use: float | None = None
+    price: float | None = None
     total_calls: int
     avg_rating: float
     creator_name: str
@@ -103,19 +100,16 @@ def search_skills(request, q: str | None = None, category: str | None = None, li
                 "name": skill.name,
                 "slug": skill.slug,
                 "description": skill.description,
-                "system_prompt": skill.system_prompt,
-                "user_prompt_template": skill.user_prompt_template,
-                "output_format": skill.output_format,
-                "example_input": skill.example_input,
-                "example_output": skill.example_output,
                 "category": skill.category,
                 "tags": skill.tags,
                 "pricing_model": skill.pricing_model,
-                "price_per_use": float(skill.price_per_use) if skill.price_per_use else None,
+                "price": float(skill.price) if skill.price else None,
                 "status": skill.status,
                 "is_featured": skill.is_featured,
                 "current_version": skill.current_version,
                 "rejection_reason": skill.rejection_reason,
+                "readme_html": skill.readme_html,
+                "download_count": skill.download_count,
                 "creator_id": skill.creator_id,
                 "creator_name": skill.creator.display_name or skill.creator.username,
                 "created_at": skill.created_at.isoformat(),
@@ -191,9 +185,9 @@ def search_articles(
                         "name": article.related_skill.name,
                         "category": article.related_skill.category,
                         "pricing_model": article.related_skill.pricing_model,
-                        "price_per_use": (
-                            float(article.related_skill.price_per_use)
-                            if article.related_skill.price_per_use
+                        "price": (
+                            float(article.related_skill.price)
+                            if article.related_skill.price
                             else None
                         ),
                         "total_calls": article.related_skill.total_calls,

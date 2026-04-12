@@ -120,6 +120,24 @@ ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 ALLOWED_DOCUMENT_TYPES = ["application/pdf", "text/markdown", "text/plain"]
 
 # =============================================================================
+# Skill 包限制
+# =============================================================================
+
+MAX_PACKAGE_SIZE = 10 * 1024 * 1024  # 10MB ZIP 包最大体积
+MAX_PACKAGE_FILE_SIZE = 2 * 1024 * 1024  # 2MB 单文件最大
+MAX_PACKAGE_FILE_COUNT = 50  # 包内文件数量上限
+FORBIDDEN_EXTENSIONS = {".exe", ".dll", ".so", ".bin", ".pyc"}
+PACKAGE_PRESIGNED_URL_EXPIRY = 600  # 预签名 URL 有效期（秒）
+
+# Skill 报告相关
+REPORT_QUARANTINE_THRESHOLD = 3  # 举报自动隔离阈值
+REPORT_ACCOUNT_AGE_DAYS = 7  # 举报者账号最低年龄（天）
+REPORT_DAILY_LIMIT = 5  # 每用户每天举报上限
+
+# Skill 审核评价
+REVIEW_PURCHASE_AGE_DAYS = 7  # 下载型 Skill 评价等待天数
+
+# =============================================================================
 # 缓存键前缀
 # =============================================================================
 

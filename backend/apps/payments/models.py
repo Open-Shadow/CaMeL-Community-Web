@@ -4,7 +4,7 @@ from apps.accounts.models import User
 
 class TransactionType(models.TextChoices):
     DEPOSIT = "DEPOSIT", "充值"
-    SKILL_PURCHASE = "SKILL_PURCHASE", "Skill 调用扣费"
+    SKILL_PURCHASE = "SKILL_PURCHASE", "Skill 购买扣费"
     SKILL_INCOME = "SKILL_INCOME", "Skill 收入"
     BOUNTY_ESCROW = "BOUNTY_ESCROW", "悬赏冻结"
     BOUNTY_RELEASE = "BOUNTY_RELEASE", "悬赏解冻"

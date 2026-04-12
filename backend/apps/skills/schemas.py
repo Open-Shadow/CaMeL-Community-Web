@@ -6,26 +6,21 @@ from ninja import Schema
 class SkillCreateInput(Schema):
     name: str
     description: str
-    system_prompt: str
-    user_prompt_template: str = ""
-    output_format: str = "text"
-    example_input: str = ""
-    example_output: str = ""
     category: str
     tags: List[str] = []
     pricing_model: str = "FREE"
-    price_per_use: Optional[float] = None
+    price: Optional[float] = None
+    changelog: str = ""
 
 
 class SkillUpdateInput(Schema):
     name: Optional[str] = None
     description: Optional[str] = None
-    system_prompt: Optional[str] = None
-    user_prompt_template: Optional[str] = None
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     pricing_model: Optional[str] = None
-    price_per_use: Optional[float] = None
+    price: Optional[float] = None
+    changelog: str = ""
 
 
 class SkillOut(Schema):
@@ -33,15 +28,10 @@ class SkillOut(Schema):
     name: str
     slug: str
     description: str
-    system_prompt: str
-    user_prompt_template: str
-    output_format: str
-    example_input: str
-    example_output: str
     category: str
     tags: List[str]
     pricing_model: str
-    price_per_use: Optional[float]
+    price: Optional[float]
     status: str
     is_featured: bool
     current_version: int
@@ -49,6 +39,9 @@ class SkillOut(Schema):
     avg_rating: float
     review_count: int
     rejection_reason: str
+    readme_html: str
+    package_size: int
+    download_count: int
     creator_id: int
     creator_name: str
     created_at: str
@@ -61,7 +54,6 @@ class SkillCallInput(Schema):
 
 class SkillCallOut(Schema):
     output_text: str
-    amount_charged: float
     duration_ms: Optional[int]
 
 
@@ -83,11 +75,9 @@ class SkillReviewOut(Schema):
 
 class SkillVersionOut(Schema):
     id: int
-    version: int
-    system_prompt: str
-    user_prompt_template: str
-    change_note: str
-    is_major: bool
+    version: str
+    changelog: str
+    status: str
     created_at: str
 
 
@@ -98,7 +88,7 @@ class SkillTrendingOut(Schema):
     description: str
     category: str
     pricing_model: str
-    price_per_use: Optional[float]
+    price: Optional[float]
     total_calls: int
     avg_rating: float
     review_count: int
@@ -110,14 +100,39 @@ class SkillRecommendationOut(SkillTrendingOut):
 
 
 class SkillUsagePreferenceInput(Schema):
-    locked_version: int | None = None
+    locked_version: str | None = None
     auto_follow_latest: bool = True
 
 
 class SkillUsagePreferenceOut(Schema):
     skill_id: int
-    locked_version: int | None = None
+    locked_version: str | None = None
     auto_follow_latest: bool
+
+
+class SkillPurchaseInput(Schema):
+    pass
+
+
+class SkillPurchaseOut(Schema):
+    id: int
+    skill_id: int
+    paid_amount: float
+    payment_type: str
+    created_at: str
+
+
+class SkillReportInput(Schema):
+    reason: str
+    detail: str = ""
+
+
+class SkillReportOut(Schema):
+    id: int
+    skill_id: int
+    reason: str
+    detail: str
+    created_at: str
 
 
 class MessageOut(Schema):

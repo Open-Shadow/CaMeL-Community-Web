@@ -1,6 +1,5 @@
 """Skills business logic."""
 from datetime import timedelta
-from difflib import SequenceMatcher
 from collections import Counter
 import re
 import time
@@ -8,31 +7,44 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.credits.models import CreditAction
 from apps.credits.services import CreditService
 from apps.notifications.services import NotificationService
-from apps.payments.services import PaymentError, PaymentsService, quantize_amount
+from apps.payments.services import PaymentError, PaymentsService, quantize_amount, PLATFORM_FEE_RATE
 from apps.search.services import SearchService
 from apps.skills.models import (
     PricingModel,
     Skill,
     SkillCall,
     SkillCategory,
+    SkillPurchase,
+    SkillReport,
     SkillReview,
     SkillStatus,
     SkillUsagePreference,
     SkillVersion,
+    VersionStatus,
+    ReportReason,
 )
 from django.core.cache import cache
-from common.constants import MAX_SKILL_PRICE, MIN_SKILL_PRICE
+from common.constants import (
+    MAX_SKILL_PRICE,
+    MIN_SKILL_PRICE,
+    REPORT_QUARANTINE_THRESHOLD,
+    REPORT_ACCOUNT_AGE_DAYS,
+    REPORT_DAILY_LIMIT,
+    REVIEW_PURCHASE_AGE_DAYS,
+    CreditLevelConfig,
+)
 
 User = get_user_model()
 
 
 class ModerationService:
-    """Very small automatic moderation layer for phase 1."""
+    """Automated security scanning for skill packages."""
 
     JAILBREAK_PATTERNS = [
         re.compile(pattern, re.IGNORECASE)
@@ -46,7 +58,7 @@ class ModerationService:
     INJECTION_PATTERNS = [
         re.compile(pattern, re.IGNORECASE)
         for pattern in [
-            r"</?(system|assistant|developer)>",
+            r"<\/?(system|assistant|developer)>",
             r"role:\s*(system|assistant|developer)",
             r"BEGIN_(SYSTEM|PROMPT)",
         ]
@@ -60,35 +72,74 @@ class ModerationService:
             r"\bmalware\b",
         ]
     ]
+    SCRIPT_DANGER_PATTERNS = [
+        re.compile(pattern, re.IGNORECASE)
+        for pattern in [
+            r"curl\s.*\|\s*(ba)?sh",
+            r"wget\s.*\|\s*(ba)?sh",
+            r"\.(ssh|aws|env)\b",
+            r"crontab\s",
+            r"systemctl\s",
+            r"\beval\s*\(",
+            r"\bexec\s*\(",
+            r"base64\s.*decode",
+            r"pickle\.loads?\(",
+        ]
+    ]
 
     @classmethod
-    def auto_review(cls, payload: dict) -> tuple[bool, list[str]]:
+    def scan_text_content(cls, text: str) -> list[str]:
+        """Scan a text string for dangerous patterns."""
+        issues: list[str] = []
+        if not text:
+            return issues
+        if any(p.search(text) for p in cls.JAILBREAK_PATTERNS):
+            issues.append("包含疑似越狱或绕过规则指令")
+        if any(p.search(text) for p in cls.INJECTION_PATTERNS):
+            issues.append("包含疑似 prompt injection 片段")
+        if any(p.search(text) for p in cls.SENSITIVE_PATTERNS):
+            issues.append("包含敏感或高风险内容")
+        return issues
+
+    @classmethod
+    def scan_script_content(cls, text: str) -> list[str]:
+        """Scan script content for dangerous patterns."""
+        issues: list[str] = []
+        if not text:
+            return issues
+        if any(p.search(text) for p in cls.SCRIPT_DANGER_PATTERNS):
+            issues.append("脚本包含潜在危险操作")
+        return issues
+
+    @classmethod
+    def auto_review(cls, file_contents: dict[str, str]) -> tuple[bool, list[str]]:
+        """Run automated review on extracted package file contents.
+
+        Args:
+            file_contents: dict mapping relative file paths to their text content.
+
+        Returns:
+            (passed, issues) tuple.
+        """
         issues: list[str] = []
 
-        for field in ("name", "description", "system_prompt", "user_prompt_template"):
-            text = (payload.get(field) or "").strip()
-            if not text:
-                continue
-
-            if any(pattern.search(text) for pattern in cls.JAILBREAK_PATTERNS):
-                issues.append(f"{field} 包含疑似越狱或绕过规则指令")
-            if any(pattern.search(text) for pattern in cls.INJECTION_PATTERNS):
-                issues.append(f"{field} 包含疑似 prompt injection 片段")
-            if any(pattern.search(text) for pattern in cls.SENSITIVE_PATTERNS):
-                issues.append(f"{field} 包含敏感或高风险内容")
-
-        if payload.get("pricing_model") == PricingModel.PER_USE and not payload.get("price_per_use"):
-            issues.append("按次付费 Skill 必须填写单次价格")
+        for path, content in file_contents.items():
+            lower_path = path.lower()
+            if lower_path.endswith((".txt", ".md")):
+                for issue in cls.scan_text_content(content):
+                    issues.append(f"{path}: {issue}")
+            if lower_path.endswith((".py", ".sh", ".bash", ".js", ".ts")):
+                for issue in cls.scan_script_content(content):
+                    issues.append(f"{path}: {issue}")
 
         return len(issues) == 0, issues
 
 
 class SkillService:
-    """Service layer for phase 1 Skill marketplace."""
+    """Service layer for the package-based Skill marketplace."""
 
     TRENDING_CACHE_KEY = "skills:trending"
     RECOMMENDATION_CACHE_KEY = "skills:recommended:user:{user_id}"
-    OUTPUT_FORMATS = {"text", "json", "markdown", "code"}
 
     @classmethod
     def _clean_tags(cls, tags: list[str] | None) -> list[str]:
@@ -109,32 +160,13 @@ class SkillService:
         return cleaned
 
     @classmethod
-    def _normalize_and_validate(cls, data: dict, existing: Skill | None = None) -> dict:
+    def _validate_metadata(cls, data: dict, existing: Skill | None = None) -> dict:
+        """Validate and normalize skill metadata (non-package fields)."""
         payload = {key: value for key, value in data.items() if value is not None}
 
         name = (payload.get("name", existing.name if existing else "") or "").strip()
         description = (
             payload.get("description", existing.description if existing else "") or ""
-        ).strip()
-        system_prompt = (
-            payload.get("system_prompt", existing.system_prompt if existing else "") or ""
-        ).strip()
-        user_prompt_template = (
-            payload.get(
-                "user_prompt_template",
-                existing.user_prompt_template if existing else "",
-            )
-            or ""
-        ).strip()
-        output_format = (
-            payload.get("output_format", existing.output_format if existing else "text")
-            or "text"
-        ).strip()
-        example_input = (
-            payload.get("example_input", existing.example_input if existing else "") or ""
-        ).strip()
-        example_output = (
-            payload.get("example_output", existing.example_output if existing else "") or ""
         ).strip()
         category = (
             payload.get("category", existing.category if existing else "") or ""
@@ -149,50 +181,41 @@ class SkillService:
             )
             or PricingModel.FREE
         ).strip()
-        price_per_use = payload.get(
-            "price_per_use",
-            existing.price_per_use if existing else None,
+        price = payload.get(
+            "price",
+            existing.price if existing else None,
         )
 
         if not name or len(name) < 2 or len(name) > 80:
             raise ValueError("Skill 名称长度需在 2 到 80 个字符之间")
         if not description or len(description) < 10 or len(description) > 500:
             raise ValueError("Skill 简介长度需在 10 到 500 个字符之间")
-        if not system_prompt or len(system_prompt) < 10:
-            raise ValueError("System Prompt 至少需要 10 个字符")
         if category not in set(SkillCategory.values):
             raise ValueError("Skill 分类无效")
         if len(tags) > 10:
             raise ValueError("标签最多 10 个")
-        if output_format not in cls.OUTPUT_FORMATS:
-            raise ValueError("输出格式无效")
         if pricing_model not in set(PricingModel.values):
             raise ValueError("定价模式无效")
 
         normalized_price: Decimal | None = None
-        if pricing_model == PricingModel.PER_USE:
-            if price_per_use in (None, ""):
-                raise ValueError("按次付费 Skill 必须填写价格")
-            normalized_price = Decimal(str(price_per_use)).quantize(Decimal("0.01"))
+        if pricing_model == PricingModel.PAID:
+            if price in (None, ""):
+                raise ValueError("付费 Skill 必须填写价格")
+            normalized_price = Decimal(str(price)).quantize(Decimal("0.01"))
             if normalized_price < Decimal(str(MIN_SKILL_PRICE)) or normalized_price > Decimal(
                 str(MAX_SKILL_PRICE)
             ):
                 raise ValueError(
-                    f"单次价格需在 ${MIN_SKILL_PRICE:.2f} 到 ${MAX_SKILL_PRICE:.2f} 之间"
+                    f"价格需在 ${MIN_SKILL_PRICE:.2f} 到 ${MAX_SKILL_PRICE:.2f} 之间"
                 )
 
         return {
             "name": name,
             "description": description,
-            "system_prompt": system_prompt,
-            "user_prompt_template": user_prompt_template,
-            "output_format": output_format,
-            "example_input": example_input,
-            "example_output": example_output,
             "category": category,
             "tags": tags,
             "pricing_model": pricing_model,
-            "price_per_use": normalized_price,
+            "price": normalized_price,
         }
 
     @staticmethod
@@ -208,31 +231,39 @@ class SkillService:
     @classmethod
     @transaction.atomic
     def create(cls, creator, data: dict) -> Skill:
-        payload = cls._normalize_and_validate(data)
+        """Create a new skill with package data.
+
+        data must include 'package_file', 'package_sha256', 'package_size',
+        'readme_html', and 'version' (SemVer string) in addition to metadata.
+        """
+        payload = cls._validate_metadata(data)
         skill = Skill.objects.create(
             creator=creator,
             slug=cls._create_unique_slug(payload["name"], creator.id),
+            package_file=data["package_file"],
+            package_sha256=data["package_sha256"],
+            package_size=data["package_size"],
+            readme_html=data.get("readme_html", ""),
+            current_version=1,
             **payload,
         )
         SkillVersion.objects.create(
             skill=skill,
-            version=1,
-            system_prompt=skill.system_prompt,
-            user_prompt_template=skill.user_prompt_template,
-            change_note="初始版本",
+            version=data.get("version", "1.0.0"),
+            package_file=data["package_file"],
+            package_sha256=data["package_sha256"],
+            changelog=data.get("changelog", "初始版本"),
+            status=VersionStatus.SCANNING,
         )
         return skill
 
     @classmethod
     @transaction.atomic
     def update(cls, skill: Skill, data: dict) -> Skill:
-        payload = cls._normalize_and_validate(data, existing=skill)
-        old_system_prompt = skill.system_prompt
-        old_user_prompt_template = skill.user_prompt_template
-        prompt_changed = (
-            payload["system_prompt"] != old_system_prompt
-            or payload["user_prompt_template"] != old_user_prompt_template
-        )
+        """Update skill metadata and optionally upload a new version."""
+        payload = cls._validate_metadata(data, existing=skill)
+        has_new_package = "package_file" in data and data["package_file"]
+
         content_changed = any(
             getattr(skill, field) != value
             for field, value in payload.items()
@@ -241,25 +272,25 @@ class SkillService:
         for field, value in payload.items():
             setattr(skill, field, value)
 
-        if prompt_changed:
-            combined_before = f"{old_system_prompt}\n{old_user_prompt_template}"
-            combined_after = f"{payload['system_prompt']}\n{payload['user_prompt_template']}"
-            similarity = SequenceMatcher(None, combined_before, combined_after).ratio()
-            is_major = similarity < 0.5
+        if has_new_package:
+            skill.package_file = data["package_file"]
+            skill.package_sha256 = data["package_sha256"]
+            skill.package_size = data["package_size"]
+            skill.readme_html = data.get("readme_html", skill.readme_html)
             skill.current_version += 1
             SkillVersion.objects.create(
                 skill=skill,
-                version=skill.current_version,
-                system_prompt=payload["system_prompt"],
-                user_prompt_template=payload["user_prompt_template"],
-                change_note="更新 Prompt",
-                is_major=is_major,
+                version=data.get("version", f"{skill.current_version}.0.0"),
+                package_file=data["package_file"],
+                package_sha256=data["package_sha256"],
+                changelog=data.get("changelog", "更新版本"),
+                status=VersionStatus.SCANNING,
             )
-            version_ids = list(skill.versions.order_by("-version").values_list("id", flat=True)[10:])
+            version_ids = list(
+                skill.versions.order_by("-created_at").values_list("id", flat=True)[10:]
+            )
             if version_ids:
                 SkillVersion.objects.filter(id__in=version_ids).delete()
-            if is_major and skill.status == SkillStatus.APPROVED:
-                cls.notify_major_update(skill)
 
         if content_changed and skill.status == SkillStatus.REJECTED:
             skill.status = SkillStatus.DRAFT
@@ -303,78 +334,143 @@ class SkillService:
     @classmethod
     @transaction.atomic
     def submit_for_review(cls, skill: Skill) -> Skill:
+        """Submit skill for automated scanning."""
         if skill.status not in (SkillStatus.DRAFT, SkillStatus.REJECTED):
             raise ValueError("只有草稿或被拒绝的技能可以提交审核")
 
-        payload = {
-            "name": skill.name,
-            "description": skill.description,
-            "system_prompt": skill.system_prompt,
-            "user_prompt_template": skill.user_prompt_template,
-            "pricing_model": skill.pricing_model,
-            "price_per_use": skill.price_per_use,
-        }
-        passed, issues = ModerationService.auto_review(payload)
+        if not skill.package_file:
+            raise ValueError("请先上传 Skill 文件包")
+
+        skill.status = SkillStatus.SCANNING
+        skill.rejection_reason = ""
+        skill.save(update_fields=["status", "rejection_reason"])
+
+        # Mark latest version as scanning
+        latest_version = skill.versions.order_by("-created_at").first()
+        if latest_version and latest_version.status != VersionStatus.APPROVED:
+            latest_version.status = VersionStatus.SCANNING
+            latest_version.save(update_fields=["status"])
+
+        NotificationService.send(
+            recipient=skill.creator,
+            notification_type="skill_submitted",
+            title="Skill 已提交扫描",
+            content=f"「{skill.name}」正在进行自动安全扫描。",
+            reference_id=str(skill.id),
+        )
+        return skill
+
+    @classmethod
+    @transaction.atomic
+    def complete_scan(cls, skill: Skill, *, passed: bool, issues: list[str]) -> Skill:
+        """Called after async scan completes."""
+        latest_version = skill.versions.order_by("-created_at").first()
 
         if not passed:
             skill.status = SkillStatus.REJECTED
             skill.rejection_reason = "；".join(issues)
             skill.save(update_fields=["status", "rejection_reason"])
+            if latest_version:
+                latest_version.status = VersionStatus.REJECTED
+                latest_version.save(update_fields=["status"])
             NotificationService.send(
                 recipient=skill.creator,
                 notification_type="skill_reviewed",
-                title="Skill 自动审核未通过",
+                title="Skill 扫描未通过",
                 content=f"「{skill.name}」存在风险项：{skill.rejection_reason}",
                 reference_id=str(skill.id),
             )
             return skill
 
-        skill.status = SkillStatus.PENDING_REVIEW
+        # Check trust level for auto-publish
+        creator_score = skill.creator.credit_score
+        is_trusted = creator_score >= CreditLevelConfig.CRAFTSMAN_MIN
+
+        if is_trusted:
+            skill.status = SkillStatus.APPROVED
+            skill.rejection_reason = ""
+            skill.save(update_fields=["status", "rejection_reason", "updated_at"])
+            if latest_version:
+                latest_version.status = VersionStatus.APPROVED
+                latest_version.save(update_fields=["status"])
+            SearchService.sync_skill(skill)
+            CreditService.add_credit(skill.creator, CreditAction.PUBLISH_SKILL, str(skill.id))
+            NotificationService.send(
+                recipient=skill.creator,
+                notification_type="skill_reviewed",
+                title="Skill 已自动上架",
+                content=f"「{skill.name}」扫描通过，已自动上架。",
+                reference_id=str(skill.id),
+            )
+        else:
+            # Low-trust users: keep in SCANNING, needs admin approval
+            NotificationService.send(
+                recipient=skill.creator,
+                notification_type="skill_submitted",
+                title="Skill 扫描通过，等待人工审核",
+                content=f"「{skill.name}」扫描通过，正在等待管理员审核。",
+                reference_id=str(skill.id),
+            )
+
+        return skill
+
+    @staticmethod
+    @transaction.atomic
+    def admin_approve(skill: Skill) -> Skill:
+        """Admin approves a skill that passed scanning but needs manual review."""
+        if skill.status != SkillStatus.SCANNING:
+            raise ValueError("当前 Skill 不在扫描/待审核状态")
+
+        skill.status = SkillStatus.APPROVED
         skill.rejection_reason = ""
-        skill.save(update_fields=["status", "rejection_reason"])
+        skill.save(update_fields=["status", "rejection_reason", "updated_at"])
+        latest_version = skill.versions.order_by("-created_at").first()
+        if latest_version:
+            latest_version.status = VersionStatus.APPROVED
+            latest_version.save(update_fields=["status"])
+        SearchService.sync_skill(skill)
+        CreditService.add_credit(skill.creator, CreditAction.PUBLISH_SKILL, str(skill.id))
         NotificationService.send(
             recipient=skill.creator,
-            notification_type="skill_submitted",
-            title="Skill 已提交人工审核",
-            content=f"「{skill.name}」已通过自动检测，正在等待版主审核。",
+            notification_type="skill_reviewed",
+            title="Skill 审核通过",
+            content=f"「{skill.name}」已通过审核并上架。",
             reference_id=str(skill.id),
         )
         return skill
 
     @staticmethod
     @transaction.atomic
-    def review(skill: Skill, reviewer, *, approve: bool, reason: str = "") -> Skill:
-        if skill.status != SkillStatus.PENDING_REVIEW:
-            raise ValueError("当前 Skill 不在待审核状态")
-
-        if approve:
-            skill.status = SkillStatus.APPROVED
-            skill.rejection_reason = ""
-            skill.save(update_fields=["status", "rejection_reason", "updated_at"])
-            SearchService.sync_skill(skill)
-            CreditService.add_credit(skill.creator, CreditAction.PUBLISH_SKILL, str(skill.id))
-            NotificationService.send(
-                recipient=skill.creator,
-                notification_type="skill_reviewed",
-                title="Skill 审核通过",
-                content=f"「{skill.name}」已通过人工审核并上架。",
-                reference_id=str(skill.id),
-            )
-            return skill
+    def admin_reject(skill: Skill, reason: str = "") -> Skill:
+        """Admin rejects a skill."""
+        if skill.status not in (SkillStatus.SCANNING, SkillStatus.APPROVED):
+            raise ValueError("当前 Skill 无法被拒绝")
 
         review_reason = reason.strip() or "未通过人工审核，请根据规范调整后重新提交。"
         skill.status = SkillStatus.REJECTED
         skill.rejection_reason = review_reason
         skill.save(update_fields=["status", "rejection_reason", "updated_at"])
+        latest_version = skill.versions.order_by("-created_at").first()
+        if latest_version:
+            latest_version.status = VersionStatus.REJECTED
+            latest_version.save(update_fields=["status"])
         SearchService.remove_skill(skill.id)
         NotificationService.send(
             recipient=skill.creator,
             notification_type="skill_reviewed",
             title="Skill 审核未通过",
-            content=f"「{skill.name}」未通过人工审核：{review_reason}",
+            content=f"「{skill.name}」未通过审核：{review_reason}",
             reference_id=str(skill.id),
         )
         return skill
+
+    @classmethod
+    @transaction.atomic
+    def review(cls, skill: Skill, reviewer, *, approve: bool, reason: str = "") -> Skill:
+        """Admin/moderator review action — approve or reject."""
+        if approve:
+            return cls.admin_approve(skill)
+        return cls.admin_reject(skill, reason)
 
     @staticmethod
     @transaction.atomic
@@ -394,25 +490,17 @@ class SkillService:
         if not input_text.strip():
             raise ValueError("请输入调用内容")
 
+        # Check purchase for paid skills
+        if skill.pricing_model == PricingModel.PAID and skill.creator_id != caller.id:
+            if not SkillPurchase.objects.filter(skill=skill, user=caller).exists():
+                raise ValueError("请先购买该 Skill")
+
         start = time.time()
         output_text = f"[模拟输出] 基于输入「{input_text[:80]}」的处理结果。"
         duration_ms = max(1, int((time.time() - start) * 1000))
-        amount_charged = Decimal("0.00")
-
-        if skill.pricing_model == PricingModel.PER_USE and skill.price_per_use:
-            try:
-                payment_result = PaymentsService.charge_skill_call(
-                    caller,
-                    skill.creator,
-                    price=skill.price_per_use,
-                    reference_id=f"skill:{skill.id}:{caller.id}:{int(time.time() * 1000)}",
-                )
-            except PaymentError as exc:
-                raise ValueError(str(exc)) from exc
-            amount_charged = quantize_amount(payment_result["charged_amount"])
 
         preference = SkillUsagePreference.objects.filter(skill=skill, user=caller).first()
-        selected_version = skill.current_version
+        selected_version = str(skill.current_version)
         if preference and not preference.auto_follow_latest and preference.locked_version:
             if skill.versions.filter(version=preference.locked_version).exists():
                 selected_version = preference.locked_version
@@ -423,7 +511,6 @@ class SkillService:
             skill_version=selected_version,
             input_text=input_text.strip(),
             output_text=output_text,
-            amount_charged=amount_charged,
             duration_ms=duration_ms,
         )
 
@@ -440,15 +527,19 @@ class SkillService:
     def add_review(skill: Skill, reviewer, rating: int, comment: str, tags: list) -> SkillReview:
         if not (1 <= rating <= 5):
             raise ValueError("评分须在 1 到 5 之间")
-        existing = SkillReview.objects.filter(skill=skill, reviewer=reviewer).first()
-        first_call = SkillCall.objects.filter(skill=skill, caller=reviewer).order_by("created_at").first()
-        if not existing and not first_call:
-            raise ValueError("必须先实际调用过该 Skill 才能评价")
-        if not existing and first_call:
-            from django.utils import timezone
 
-            if first_call.created_at < timezone.now() - timedelta(hours=24):
-                raise ValueError("首次调用超过 24 小时，评价窗口已关闭")
+        existing = SkillReview.objects.filter(skill=skill, reviewer=reviewer).first()
+
+        # Dual review eligibility: SkillCall OR 7-day SkillPurchase
+        has_call = SkillCall.objects.filter(skill=skill, caller=reviewer).exists()
+        purchase = SkillPurchase.objects.filter(skill=skill, user=reviewer).first()
+        has_mature_purchase = (
+            purchase is not None
+            and purchase.created_at <= timezone.now() - timedelta(days=REVIEW_PURCHASE_AGE_DAYS)
+        )
+
+        if not existing and not has_call and not has_mature_purchase:
+            raise ValueError("需要调用过该 Skill 或购买满 7 天后才能评价")
 
         review, _created = SkillReview.objects.update_or_create(
             skill=skill,
@@ -471,7 +562,7 @@ class SkillService:
 
     @staticmethod
     def list_versions(skill: Skill):
-        return skill.versions.order_by("-version")
+        return skill.versions.order_by("-created_at")
 
     @staticmethod
     def list_trending(limit: int = 10):
@@ -619,20 +710,20 @@ class SkillService:
         preference, _created = SkillUsagePreference.objects.get_or_create(
             skill=skill,
             user=user,
-            defaults={"locked_version": None, "auto_follow_latest": True},
+            defaults={"locked_version": "", "auto_follow_latest": True},
         )
         return preference
 
     @staticmethod
     @transaction.atomic
-    def update_usage_preference(skill: Skill, user, *, locked_version: int | None, auto_follow_latest: bool) -> SkillUsagePreference:
+    def update_usage_preference(skill: Skill, user, *, locked_version: str | None, auto_follow_latest: bool) -> SkillUsagePreference:
         if not auto_follow_latest:
-            if locked_version is None:
+            if not locked_version:
                 raise ValueError("锁定版本时必须指定版本号")
             if not skill.versions.filter(version=locked_version).exists():
                 raise ValueError("指定版本不存在")
         preference = SkillService.get_usage_preference(skill, user)
-        preference.locked_version = None if auto_follow_latest else locked_version
+        preference.locked_version = "" if auto_follow_latest else (locked_version or "")
         preference.auto_follow_latest = auto_follow_latest
         preference.save(update_fields=["locked_version", "auto_follow_latest", "updated_at"])
         return preference
@@ -653,3 +744,128 @@ class SkillService:
                 content=f"你使用过的 Skill《{skill.name}》已更新到 v{skill.current_version}。",
                 reference_id=f"skill:{skill.id}:version:{skill.current_version}",
             )
+
+
+class SkillPurchaseService:
+    """Handle skill purchase and entitlement."""
+
+    @staticmethod
+    @transaction.atomic
+    def purchase(skill: Skill, buyer) -> SkillPurchase:
+        if skill.status != SkillStatus.APPROVED:
+            raise ValueError("该 Skill 暂不可购买")
+
+        # Idempotent: return existing purchase
+        existing = SkillPurchase.objects.filter(skill=skill, user=buyer).first()
+        if existing:
+            return existing
+
+        # Creator auto-gets free access
+        if skill.creator_id == buyer.id:
+            return SkillPurchase.objects.create(
+                skill=skill, user=buyer, paid_amount=Decimal("0"), payment_type="FREE",
+            )
+
+        if skill.pricing_model == PricingModel.FREE:
+            return SkillPurchase.objects.create(
+                skill=skill, user=buyer, paid_amount=Decimal("0"), payment_type="FREE",
+            )
+
+        # PAID skill
+        price = skill.price
+        if not price or price <= 0:
+            raise ValueError("Skill 价格配置异常")
+
+        normalized_price = quantize_amount(price)
+
+        buyer_locked = User.objects.select_for_update().get(id=buyer.id)
+        if buyer_locked.balance < normalized_price:
+            raise PaymentError("余额不足，请先充值")
+
+        platform_fee = quantize_amount(normalized_price * PLATFORM_FEE_RATE)
+        creator_income = quantize_amount(normalized_price - platform_fee)
+
+        buyer_locked.balance = quantize_amount(buyer_locked.balance - normalized_price)
+        buyer_locked.save(update_fields=["balance"])
+
+        creator = User.objects.select_for_update().get(id=skill.creator_id)
+        creator.balance = quantize_amount(creator.balance + creator_income)
+        creator.save(update_fields=["balance"])
+
+        purchase = SkillPurchase.objects.create(
+            skill=skill, user=buyer_locked, paid_amount=normalized_price, payment_type="MONEY",
+        )
+
+        from apps.payments.models import TransactionType
+        PaymentsService._create_transaction(
+            buyer_locked,
+            TransactionType.SKILL_PURCHASE,
+            -normalized_price,
+            reference_id=f"skill_purchase:{purchase.id}",
+            description=f"购买 Skill「{skill.name}」",
+        )
+        PaymentsService._create_transaction(
+            creator,
+            TransactionType.SKILL_INCOME,
+            creator_income,
+            reference_id=f"skill_purchase:{purchase.id}",
+            description=f"Skill「{skill.name}」销售收入",
+        )
+
+        return purchase
+
+    @staticmethod
+    def has_access(skill: Skill, user) -> bool:
+        """Check if user has access (purchased or creator)."""
+        if skill.creator_id == user.id:
+            return True
+        if skill.pricing_model == PricingModel.FREE:
+            return True
+        return SkillPurchase.objects.filter(skill=skill, user=user).exists()
+
+
+class SkillReportService:
+    """Handle community reporting and quarantine."""
+
+    @staticmethod
+    @transaction.atomic
+    def report(skill: Skill, reporter, reason: str, detail: str = "") -> SkillReport:
+        if skill.creator_id == reporter.id:
+            raise ValueError("不能举报自己的 Skill")
+
+        # Account age check
+        if reporter.date_joined > timezone.now() - timedelta(days=REPORT_ACCOUNT_AGE_DAYS):
+            raise ValueError(f"账号注册需满 {REPORT_ACCOUNT_AGE_DAYS} 天才能举报")
+
+        # Daily limit
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_count = SkillReport.objects.filter(
+            reporter=reporter, created_at__gte=today_start,
+        ).count()
+        if daily_count >= REPORT_DAILY_LIMIT:
+            raise ValueError(f"每日举报上限 {REPORT_DAILY_LIMIT} 次")
+
+        if reason not in set(ReportReason.values):
+            raise ValueError("举报理由无效")
+
+        report, created = SkillReport.objects.get_or_create(
+            skill=skill,
+            reporter=reporter,
+            defaults={"reason": reason, "detail": detail.strip()},
+        )
+
+        if created:
+            total_reports = SkillReport.objects.filter(skill=skill).count()
+            if total_reports >= REPORT_QUARANTINE_THRESHOLD and skill.status == SkillStatus.APPROVED:
+                skill.status = SkillStatus.ARCHIVED
+                skill.save(update_fields=["status", "updated_at"])
+                SearchService.remove_skill(skill.id)
+                NotificationService.send(
+                    recipient=skill.creator,
+                    notification_type="skill_reported",
+                    title="Skill 已被隔离",
+                    content=f"「{skill.name}」因多次举报已被暂时隔离，等待管理员审核。",
+                    reference_id=str(skill.id),
+                )
+
+        return report

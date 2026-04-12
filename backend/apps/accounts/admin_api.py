@@ -116,7 +116,7 @@ class SkillReviewQueueItemOutput(Schema):
     category: str
     tags: list[str]
     pricing_model: str
-    price_per_use: float | None
+    price: float | None
     status: str
     is_featured: bool
     rejection_reason: str
@@ -371,7 +371,7 @@ def _skill_queue_item_out(skill: Skill) -> dict:
         "category": skill.category,
         "tags": skill.tags,
         "pricing_model": skill.pricing_model,
-        "price_per_use": float(skill.price_per_use) if skill.price_per_use is not None else None,
+        "price": float(skill.price) if skill.price is not None else None,
         "status": skill.status,
         "is_featured": skill.is_featured,
         "rejection_reason": skill.rejection_reason,
@@ -393,7 +393,7 @@ def list_skill_review_queue(
 ):
     queryset = Skill.objects.select_related("creator")
     if status == "pending":
-        queryset = queryset.filter(status=SkillStatus.PENDING_REVIEW)
+        queryset = queryset.filter(status=SkillStatus.SCANNING)
     elif status == "rejected":
         queryset = queryset.filter(status=SkillStatus.REJECTED)
     elif status == "approved":
@@ -401,7 +401,7 @@ def list_skill_review_queue(
     elif status == "all":
         pass
     else:
-        queryset = queryset.filter(status=SkillStatus.PENDING_REVIEW)
+        queryset = queryset.filter(status=SkillStatus.SCANNING)
 
     if q:
         queryset = queryset.filter(

@@ -1,23 +1,25 @@
 """Skills API routes."""
 from typing import List, Optional
 
-from ninja import Router
+from ninja import Router, File, UploadedFile
 from ninja.errors import HttpError
 from ninja.responses import Status
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
 from common.permissions import AuthBearer
-from apps.skills.models import Skill, SkillStatus
+from apps.skills.models import Skill, SkillStatus, SkillPurchase, VersionStatus
 from apps.skills.schemas import (
     SkillCreateInput, SkillUpdateInput, SkillOut,
     SkillCallInput, SkillCallOut, SkillReviewInput, SkillReviewOut,
     SkillTrendingOut, SkillVersionOut,
     SkillRecommendationOut,
     SkillUsagePreferenceInput, SkillUsagePreferenceOut,
+    SkillPurchaseInput, SkillPurchaseOut,
+    SkillReportInput, SkillReportOut,
     MessageOut,
 )
-from apps.skills.services import SkillService
+from apps.skills.services import SkillService, SkillPurchaseService, SkillReportService
 
 router = Router(tags=["skills"])
 
@@ -28,15 +30,10 @@ def _skill_out(skill: Skill) -> dict:
         "name": skill.name,
         "slug": skill.slug,
         "description": skill.description,
-        "system_prompt": skill.system_prompt,
-        "user_prompt_template": skill.user_prompt_template,
-        "output_format": skill.output_format,
-        "example_input": skill.example_input,
-        "example_output": skill.example_output,
         "category": skill.category,
         "tags": skill.tags,
         "pricing_model": skill.pricing_model,
-        "price_per_use": float(skill.price_per_use) if skill.price_per_use else None,
+        "price": float(skill.price) if skill.price else None,
         "status": skill.status,
         "is_featured": skill.is_featured,
         "current_version": skill.current_version,
@@ -44,6 +41,9 @@ def _skill_out(skill: Skill) -> dict:
         "avg_rating": float(skill.avg_rating),
         "review_count": skill.review_count,
         "rejection_reason": skill.rejection_reason,
+        "readme_html": skill.readme_html,
+        "package_size": skill.package_size,
+        "download_count": skill.download_count,
         "creator_id": skill.creator_id,
         "creator_name": skill.creator.display_name or skill.creator.username,
         "created_at": skill.created_at.isoformat(),
@@ -52,9 +52,18 @@ def _skill_out(skill: Skill) -> dict:
 
 
 @router.post("", response={201: SkillOut}, auth=AuthBearer())
-def create_skill(request, data: SkillCreateInput):
+def create_skill(request, data: SkillCreateInput, package: UploadedFile = File(...)):
+    from apps.skills.package_service import PackageService
+
     try:
-        skill = SkillService.create(request.auth, data.dict())
+        pkg_data = PackageService.process_upload(package)
+    except ValueError as e:
+        raise HttpError(400, str(e))
+
+    merged = data.dict()
+    merged.update(pkg_data)
+    try:
+        skill = SkillService.create(request.auth, merged)
     except ValueError as e:
         raise HttpError(400, str(e))
     return Status(201, _skill_out(skill))
@@ -106,7 +115,7 @@ def list_trending_skills(request, limit: int = 10):
             "description": skill.description,
             "category": skill.category,
             "pricing_model": skill.pricing_model,
-            "price_per_use": float(skill.price_per_use) if skill.price_per_use else None,
+            "price": float(skill.price) if skill.price else None,
             "total_calls": skill.total_calls,
             "avg_rating": float(skill.avg_rating),
             "review_count": skill.review_count,
@@ -127,7 +136,7 @@ def list_recommended_skills(request, limit: int = 8):
             "description": item["skill"].description,
             "category": item["skill"].category,
             "pricing_model": item["skill"].pricing_model,
-            "price_per_use": float(item["skill"].price_per_use) if item["skill"].price_per_use else None,
+            "price": float(item["skill"].price) if item["skill"].price else None,
             "total_calls": item["skill"].total_calls,
             "avg_rating": float(item["skill"].avg_rating),
             "review_count": item["skill"].review_count,
@@ -138,6 +147,21 @@ def list_recommended_skills(request, limit: int = 8):
     ]
 
 
+@router.get("/purchased", response=List[SkillPurchaseOut], auth=AuthBearer())
+def list_purchased_skills(request):
+    purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill").order_by("-created_at")
+    return [
+        {
+            "id": p.id,
+            "skill_id": p.skill_id,
+            "paid_amount": float(p.paid_amount),
+            "payment_type": p.payment_type,
+            "created_at": p.created_at.isoformat(),
+        }
+        for p in purchases
+    ]
+
+
 @router.get("/{skill_id}", response=SkillOut)
 def get_skill(request, skill_id: int):
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
@@ -145,9 +169,22 @@ def get_skill(request, skill_id: int):
 
 
 @router.patch("/{skill_id}", response=SkillOut, auth=AuthBearer())
-def update_skill(request, skill_id: int, data: SkillUpdateInput):
+def update_skill(request, skill_id: int, data: SkillUpdateInput, package: UploadedFile = File(None)):
     skill = get_object_or_404(Skill, id=skill_id, creator=request.auth)
-    skill = SkillService.update(skill, {k: v for k, v in data.dict().items() if v is not None})
+    merged = {k: v for k, v in data.dict().items() if v is not None}
+
+    if package:
+        from apps.skills.package_service import PackageService
+        try:
+            pkg_data = PackageService.process_upload(package)
+        except ValueError as e:
+            raise HttpError(400, str(e))
+        merged.update(pkg_data)
+
+    try:
+        skill = SkillService.update(skill, merged)
+    except ValueError as e:
+        raise HttpError(400, str(e))
     return _skill_out(skill)
 
 
@@ -188,6 +225,42 @@ def delete_skill(request, skill_id: int):
     return {"message": "Skill 已删除"}
 
 
+@router.post("/{skill_id}/purchase", response={201: SkillPurchaseOut}, auth=AuthBearer())
+def purchase_skill(request, skill_id: int):
+    skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
+    try:
+        purchase = SkillPurchaseService.purchase(skill, request.auth)
+    except ValueError as e:
+        raise HttpError(400, str(e))
+    return Status(201, {
+        "id": purchase.id,
+        "skill_id": purchase.skill_id,
+        "paid_amount": float(purchase.paid_amount),
+        "payment_type": purchase.payment_type,
+        "created_at": purchase.created_at.isoformat(),
+    })
+
+
+@router.get("/{skill_id}/download", auth=AuthBearer())
+def download_skill(request, skill_id: int):
+    skill = get_object_or_404(Skill, id=skill_id)
+
+    if not SkillPurchaseService.has_access(skill, request.auth):
+        raise HttpError(403, "请先购买该 Skill")
+
+    if not skill.package_file:
+        raise HttpError(404, "Skill 文件包不存在")
+
+    from apps.skills.package_service import PackageService
+    url = PackageService.generate_download_url(skill.package_file.name)
+
+    skill.download_count += 1
+    skill.save(update_fields=["download_count"])
+
+    from django.http import HttpResponseRedirect
+    return HttpResponseRedirect(url)
+
+
 @router.post("/{skill_id}/call", response=SkillCallOut, auth=AuthBearer())
 def call_skill(request, skill_id: int, data: SkillCallInput):
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
@@ -195,7 +268,23 @@ def call_skill(request, skill_id: int, data: SkillCallInput):
         call = SkillService.call(skill, request.auth, data.input_text)
     except ValueError as e:
         raise HttpError(400, str(e))
-    return {"output_text": call.output_text, "amount_charged": float(call.amount_charged), "duration_ms": call.duration_ms}
+    return {"output_text": call.output_text, "duration_ms": call.duration_ms}
+
+
+@router.post("/{skill_id}/report", response={201: SkillReportOut}, auth=AuthBearer())
+def report_skill(request, skill_id: int, data: SkillReportInput):
+    skill = get_object_or_404(Skill, id=skill_id)
+    try:
+        report = SkillReportService.report(skill, request.auth, data.reason, data.detail)
+    except ValueError as e:
+        raise HttpError(400, str(e))
+    return Status(201, {
+        "id": report.id,
+        "skill_id": report.skill_id,
+        "reason": report.reason,
+        "detail": report.detail,
+        "created_at": report.created_at.isoformat(),
+    })
 
 
 @router.post("/{skill_id}/reviews", response={201: SkillReviewOut}, auth=AuthBearer())
@@ -228,15 +317,13 @@ def list_reviews(request, skill_id: int):
 @router.get("/{skill_id}/versions", response=List[SkillVersionOut])
 def list_versions(request, skill_id: int):
     skill = get_object_or_404(Skill, id=skill_id)
-    versions = SkillService.list_versions(skill)
+    versions = SkillService.list_versions(skill).filter(status=VersionStatus.APPROVED)
     return [
         {
             "id": version.id,
             "version": version.version,
-            "system_prompt": version.system_prompt,
-            "user_prompt_template": version.user_prompt_template,
-            "change_note": version.change_note,
-            "is_major": version.is_major,
+            "changelog": version.changelog,
+            "status": version.status,
             "created_at": version.created_at.isoformat(),
         }
         for version in versions
@@ -249,7 +336,7 @@ def get_usage_preference(request, skill_id: int):
     preference = SkillService.get_usage_preference(skill, request.auth)
     return {
         "skill_id": skill.id,
-        "locked_version": preference.locked_version,
+        "locked_version": preference.locked_version or None,
         "auto_follow_latest": preference.auto_follow_latest,
     }
 
@@ -268,6 +355,6 @@ def update_usage_preference(request, skill_id: int, data: SkillUsagePreferenceIn
         raise HttpError(400, str(exc))
     return {
         "skill_id": skill.id,
-        "locked_version": preference.locked_version,
+        "locked_version": preference.locked_version or None,
         "auto_follow_latest": preference.auto_follow_latest,
     }

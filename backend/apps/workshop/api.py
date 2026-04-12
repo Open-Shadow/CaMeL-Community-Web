@@ -109,7 +109,7 @@ def _related_skill_out(skill) -> dict | None:
         "name": skill.name,
         "category": skill.category,
         "pricing_model": skill.pricing_model,
-        "price_per_use": float(skill.price_per_use) if skill.price_per_use else None,
+        "price": float(skill.price) if skill.price else None,
         "total_calls": skill.total_calls,
         "avg_rating": float(skill.avg_rating),
         "creator_name": skill.creator.display_name or skill.creator.username,

@@ -83,7 +83,7 @@ class RelatedSkillOut(Schema):
     name: str
     category: str
     pricing_model: str
-    price_per_use: float | None = None
+    price: float | None = None
     total_calls: int
     avg_rating: float
     creator_name: str

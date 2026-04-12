@@ -71,3 +71,4 @@ coverage.xml
 backend/celery.pid
 .runtime/
 .humanize*
+docs/plan_skill.md
