@@ -643,7 +643,9 @@ class TestHTTPSkillDownload:
 
     @pytest.mark.django_db
     def test_download_archived_skill_allowed_for_entitled(self, client, buyer, approved_skill):
-        """GET /api/skills/{id}/download for archived free skill succeeds for entitled users."""
+        """GET /api/skills/{id}/download for archived free skill succeeds for prior purchasers."""
+        # Archived free skills require a purchase record — create one first
+        SkillPurchase.objects.create(skill=approved_skill, user=buyer, paid_amount=0, payment_type="FREE")
         approved_skill.status = SkillStatus.ARCHIVED
         approved_skill.save()
         resp = client.get(

@@ -687,17 +687,30 @@ class SkillService:
         except OSError:
             skill.package_size = 0
         skill.current_version = version_obj.version
-        # Apply any metadata changes that were deferred at upload time
-        for field, value in (version_obj.pending_metadata or {}).items():
-            setattr(skill, field, value)
-        # Re-render readme from the new package if possible
+        # Re-render readme and extract metadata from the package
         try:
             from apps.skills.package_service import PackageService
+            version_obj.package_file.seek(0)
             result = PackageService.process_upload(version_obj.package_file)
             skill.readme_html = result.get("readme_html", skill.readme_html)
+            # For new versions: apply creator-submitted deferred metadata.
+            # For fallback promotions (pending_metadata == {}): restore metadata
+            # from the package's SKILL.md so the live skill matches the package.
+            meta_source = version_obj.pending_metadata or {}
+            if not meta_source:
+                for key in ("name", "description", "category", "tags"):
+                    if key in result:
+                        meta_source[key] = result[key]
+            for field, value in meta_source.items():
+                if hasattr(skill, field):
+                    setattr(skill, field, value)
         except Exception:
-            pass
+            # Fall back to applying only explicit pending_metadata
+            for field, value in (version_obj.pending_metadata or {}).items():
+                setattr(skill, field, value)
+        from apps.search.services import SearchService
         skill.save()
+        SearchService.sync_skill(skill)
 
     @classmethod
     @transaction.atomic
@@ -1241,9 +1254,15 @@ class SkillPurchaseService:
 
     @staticmethod
     def has_access(skill: Skill, user) -> bool:
-        """Check if user has access (purchased or creator)."""
+        """Check if user has access (purchased or creator).
+
+        Archived skills require a purchase record even for free skills —
+        they've been taken down and only prior purchasers retain access.
+        """
         if skill.creator_id == user.id:
             return True
+        if skill.status == SkillStatus.ARCHIVED:
+            return SkillPurchase.objects.filter(skill=skill, user=user).exists()
         if skill.pricing_model == PricingModel.FREE:
             return True
         return SkillPurchase.objects.filter(skill=skill, user=user).exists()
