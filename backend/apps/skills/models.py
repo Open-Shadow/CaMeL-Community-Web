@@ -59,7 +59,7 @@ class Skill(models.Model):
     price = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SkillStatus.choices, default=SkillStatus.DRAFT)
     is_featured = models.BooleanField(default=False)
-    current_version = models.CharField(max_length=20, default="1.0.0")
+    current_version = models.CharField(max_length=50, default="1.0.0")
     total_calls = models.IntegerField(default=0)
     avg_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     review_count = models.IntegerField(default=0)
@@ -83,7 +83,7 @@ class Skill(models.Model):
 
 class SkillVersion(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="versions")
-    version = models.CharField(max_length=20)
+    version = models.CharField(max_length=50)
     package_file = models.FileField(upload_to="skill_packages/%Y/%m/")
     package_sha256 = models.CharField(max_length=64)
     changelog = models.TextField(blank=True)
@@ -104,7 +104,7 @@ class SkillVersion(models.Model):
 class SkillCall(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="calls")
     caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_calls")
-    skill_version = models.CharField(max_length=20)
+    skill_version = models.CharField(max_length=50)
     input_text = models.TextField()
     output_text = models.TextField(blank=True)
     duration_ms = models.IntegerField(null=True, blank=True)
@@ -132,7 +132,7 @@ class SkillReview(models.Model):
 class SkillUsagePreference(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="usage_preferences")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_usage_preferences")
-    locked_version = models.CharField(max_length=20, blank=True, default="")
+    locked_version = models.CharField(max_length=50, blank=True, default="")
     auto_follow_latest = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

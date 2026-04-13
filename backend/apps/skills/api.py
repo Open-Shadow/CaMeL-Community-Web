@@ -50,7 +50,7 @@ def _skill_out(skill: Skill, request_user=None) -> dict:
         "creator_name": skill.creator.display_name or skill.creator.username,
         "created_at": skill.created_at.isoformat(),
         "updated_at": skill.updated_at.isoformat(),
-        "has_package": bool(skill.package_file),
+        "has_package": skill.versions.filter(status=VersionStatus.APPROVED).exists(),
     }
     # Indicate if requester has purchased (for detail page UI decisions)
     if request_user:

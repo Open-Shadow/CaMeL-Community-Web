@@ -537,6 +537,12 @@ class SkillService:
             return skill
         if not latest_version and skill.status != SkillStatus.SCANNING:
             return skill
+        # Also bail if the skill was archived while the scan was in flight —
+        # applying scan transitions to an archived skill would silently undo it.
+        if skill.status == SkillStatus.ARCHIVED:
+            if latest_version:
+                latest_version.save(update_fields=["scan_result", "scan_warnings"])
+            return skill
 
         is_version_update = skill.status == SkillStatus.APPROVED
 
