@@ -376,6 +376,49 @@ class SkillService:
 
     @staticmethod
     @transaction.atomic
+    def reinstate_quarantined(skill: Skill) -> Skill:
+        """Restore a quarantined skill to APPROVED availability.
+
+        Two cases:
+        1. Skill is ARCHIVED (full quarantine): find latest approved version,
+           promote it as current_version, restore skill to APPROVED.
+        2. Skill is APPROVED but has an ARCHIVED version that was quarantined
+           (fallback-promoted case): reinstate that version to APPROVED and
+           re-promote it if it's newer than current_version.
+        """
+        if skill.status == SkillStatus.ARCHIVED:
+            latest_approved = skill.versions.filter(
+                status=VersionStatus.APPROVED
+            ).order_by("-created_at").first()
+            if latest_approved:
+                skill.current_version = latest_approved.version
+                skill.package_file = latest_approved.package_file
+            skill.status = SkillStatus.APPROVED
+            skill.save(update_fields=["status", "current_version", "package_file", "updated_at"])
+            SearchService.sync_skill(skill)
+            cache.delete(SkillService.TRENDING_CACHE_KEY)
+            return skill
+
+        # Fallback case: skill is APPROVED, reinstate the most recently archived version
+        quarantined = skill.versions.filter(
+            status=VersionStatus.ARCHIVED
+        ).order_by("-created_at").first()
+        if quarantined:
+            quarantined.status = VersionStatus.APPROVED
+            quarantined.save(update_fields=["status"])
+            # Re-promote if it's newer than current live version
+            from packaging.version import Version as PkgVersion
+            try:
+                if not skill.current_version or PkgVersion(quarantined.version) > PkgVersion(skill.current_version):
+                    skill.current_version = quarantined.version
+                    skill.package_file = quarantined.package_file
+                    skill.save(update_fields=["current_version", "package_file", "updated_at"])
+            except Exception:
+                pass
+        return skill
+
+    @staticmethod
+    @transaction.atomic
     def delete(skill: Skill):
         skill_id = skill.id
         skill.delete()

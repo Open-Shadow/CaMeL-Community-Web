@@ -23,6 +23,9 @@ interface SkillReviewQueueItem {
   created_at: string
   updated_at: string
   is_featured?: boolean
+  pending_version: string | null
+  pending_version_id: number | null
+  pending_version_changelog: string | null
 }
 
 interface SkillReviewQueueResponse {
@@ -92,6 +95,7 @@ export default function AdminSkillsPage() {
       const response = await api.post<SkillReviewQueueItem>(`/admin/skills/${item.id}/review`, {
         action,
         reason,
+        ...(item.pending_version_id != null ? { version_id: item.pending_version_id } : {}),
       })
       setItems((current) => current.map((skill) => (skill.id === item.id ? response.data : skill)))
       await loadQueue()
@@ -211,16 +215,23 @@ export default function AdminSkillsPage() {
                   />
                 </div>
 
+                {item.pending_version_id != null ? (
+                  <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                    待审核新版本：v{item.pending_version}
+                    {item.pending_version_changelog ? ` — ${item.pending_version_changelog}` : ''}
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    disabled={actioningId === item.id || item.status !== 'SCANNING'}
+                    disabled={actioningId === item.id || (item.status !== 'SCANNING' && item.pending_version_id == null)}
                     onClick={() => void handleReview(item, 'APPROVE')}
                   >
                     审核通过
                   </Button>
                   <Button
                     variant="destructive"
-                    disabled={actioningId === item.id || item.status !== 'SCANNING'}
+                    disabled={actioningId === item.id || (item.status !== 'SCANNING' && item.pending_version_id == null)}
                     onClick={() => void handleReview(item, 'REJECT')}
                   >
                     审核拒绝

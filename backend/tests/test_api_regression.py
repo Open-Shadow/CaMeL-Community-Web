@@ -1108,3 +1108,79 @@ class TestHTTPDualReviewEligibility:
             **_jwt_header(buyer),
         )
         assert resp.status_code == 400
+
+
+class TestReinstateQuarantined:
+    """Service-layer tests for SkillService.reinstate_quarantined()."""
+
+    @pytest.fixture
+    def creator(self, db):
+        return User.objects.create_user(username="creator_r", email="creator_r@test.com", password="pw")
+
+    @pytest.mark.django_db
+    def test_reinstate_archived_skill_restores_approved(self, creator):
+        """reinstate_quarantined() on ARCHIVED skill → APPROVED, not DRAFT."""
+        skill = Skill.objects.create(
+            creator=creator, name="Archived Skill", slug="archived-skill",
+            description="desc", category="utility", status=SkillStatus.ARCHIVED,
+        )
+        SkillVersion.objects.create(
+            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
+            package_file="skills/archived-skill/1.0.0.zip",
+        )
+        result = SkillService.reinstate_quarantined(skill)
+        assert result.status == SkillStatus.APPROVED
+
+    @pytest.mark.django_db
+    def test_reinstate_archived_promotes_latest_approved_version(self, creator):
+        """reinstate_quarantined() sets current_version to latest approved version."""
+        skill = Skill.objects.create(
+            creator=creator, name="Archived Skill2", slug="archived-skill2",
+            description="desc", category="utility", status=SkillStatus.ARCHIVED,
+        )
+        SkillVersion.objects.create(
+            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
+            package_file="skills/archived-skill2/1.0.0.zip",
+        )
+        result = SkillService.reinstate_quarantined(skill)
+        assert result.current_version == "1.0.0"
+
+    @pytest.mark.django_db
+    def test_reinstate_fallback_reinstates_archived_version(self, creator):
+        """reinstate_quarantined() on APPROVED skill with ARCHIVED version reinstates it."""
+        skill = Skill.objects.create(
+            creator=creator, name="Fallback Skill", slug="fallback-skill",
+            description="desc", category="utility", status=SkillStatus.APPROVED,
+            current_version="0.9.0",
+        )
+        SkillVersion.objects.create(
+            skill=skill, version="0.9.0", status=VersionStatus.APPROVED,
+            package_file="skills/fallback-skill/0.9.0.zip",
+        )
+        quarantined = SkillVersion.objects.create(
+            skill=skill, version="1.0.0", status=VersionStatus.ARCHIVED,
+            package_file="skills/fallback-skill/1.0.0.zip",
+        )
+        SkillService.reinstate_quarantined(skill)
+        quarantined.refresh_from_db()
+        assert quarantined.status == VersionStatus.APPROVED
+
+    @pytest.mark.django_db
+    def test_reinstate_fallback_promotes_newer_version(self, creator):
+        """reinstate_quarantined() re-promotes the reinstated version if it's newer."""
+        skill = Skill.objects.create(
+            creator=creator, name="Promote Skill", slug="promote-skill",
+            description="desc", category="utility", status=SkillStatus.APPROVED,
+            current_version="0.9.0",
+        )
+        SkillVersion.objects.create(
+            skill=skill, version="0.9.0", status=VersionStatus.APPROVED,
+            package_file="skills/promote-skill/0.9.0.zip",
+        )
+        SkillVersion.objects.create(
+            skill=skill, version="1.0.0", status=VersionStatus.ARCHIVED,
+            package_file="skills/promote-skill/1.0.0.zip",
+        )
+        result = SkillService.reinstate_quarantined(skill)
+        result.refresh_from_db()
+        assert result.current_version == "1.0.0"
