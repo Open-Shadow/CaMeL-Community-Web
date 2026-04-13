@@ -19,6 +19,13 @@ class AuthBearer(HttpBearer):
             return None
 
 
+# Go role values: 1=common, 10=admin, 100=root
+ROLE_COMMON = 1
+ROLE_COMMUNITY_MODERATOR = 5
+ROLE_ADMIN = 10
+ROLE_ROOT = 100
+
+
 def public_api(func):
     """No authentication required."""
     return func
@@ -30,24 +37,24 @@ def login_required(func):
 
 
 def moderator_required(func):
-    """Requires moderator role or above."""
+    """Requires moderator role or above (role >= 5)."""
     from functools import wraps
     @wraps(func)
     def wrapper(request, *args, **kwargs):
         user = getattr(request, 'auth', None)
-        if not user or user.role not in ('MODERATOR', 'ADMIN'):
+        if not user or user.role < ROLE_COMMUNITY_MODERATOR:
             raise HttpError(403, "需要版主权限")
         return func(request, *args, **kwargs)
     return wrapper
 
 
 def admin_required(func):
-    """Requires admin role."""
+    """Requires admin role (role >= 10)."""
     from functools import wraps
     @wraps(func)
     def wrapper(request, *args, **kwargs):
         user = getattr(request, 'auth', None)
-        if not user or user.role != 'ADMIN':
+        if not user or user.role < ROLE_ADMIN:
             raise HttpError(403, "需要管理员权限")
         return func(request, *args, **kwargs)
     return wrapper

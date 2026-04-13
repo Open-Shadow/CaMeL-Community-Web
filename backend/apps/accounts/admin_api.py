@@ -6,18 +6,24 @@ from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from ninja import Router, Schema
 
-from common.permissions import AuthBearer, admin_required, moderator_required
-from apps.accounts.models import CamelUser as User, UserRole
+from common.permissions import AuthBearer, admin_required, moderator_required, ROLE_ADMIN
+from apps.accounts.models import CamelUser as User, CommunityProfile, get_or_create_profile
 from apps.payments.models import Transaction, TransactionType
 from apps.skills.models import Skill, SkillStatus
 from apps.skills.services import SkillService
 from apps.workshop.models import Article
 from apps.bounties.models import Bounty
-from apps.credits.models import CreditLog
+from common.quota_service import QUOTA_PER_DOLLAR
 from common.utils import build_absolute_media_url
 
 
 router = Router(tags=["admin"], auth=AuthBearer())
+
+ROLE_LABELS = {1: "普通用户", 5: "社区版主", 10: "管理员", 100: "超级管理员"}
+
+
+def _quota_to_usd(quota: int) -> float:
+    return float(Decimal(quota) / Decimal(QUOTA_PER_DOLLAR))
 
 
 # =============================================================================
@@ -41,13 +47,12 @@ class UserListOutput(Schema):
     username: str
     email: str
     display_name: str
-    role: str
+    role: int
     level: str
     credit_score: int
     balance: float
     frozen_balance: float
     is_active: bool
-    date_joined: str
     last_login: str | None
 
 
@@ -59,7 +64,7 @@ class UserListResponse(Schema):
 
 
 class RoleUpdateInput(Schema):
-    role: str
+    role: int
 
 
 class BanInput(Schema):
@@ -95,13 +100,12 @@ class UserDetailOutput(Schema):
     display_name: str
     bio: str
     avatar_url: str
-    role: str
+    role: int
     level: str
     credit_score: int
     balance: float
     frozen_balance: float
     is_active: bool
-    date_joined: str
     last_login: str | None
     skills_count: int
     articles_count: int
@@ -143,6 +147,27 @@ class SkillFeaturedInput(Schema):
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+def _user_list_item(u: User) -> dict:
+    profile = get_or_create_profile(u)
+    return {
+        "id": u.id,
+        "username": u.username,
+        "email": u.email,
+        "display_name": u.display_name,
+        "role": u.role,
+        "level": u.community_level,
+        "credit_score": u.credit_score,
+        "balance": _quota_to_usd(u.quota),
+        "frozen_balance": _quota_to_usd(profile.frozen_balance),
+        "is_active": u.is_active,
+        "last_login": u.last_login.isoformat() if u.last_login else None,
+    }
+
+
+# =============================================================================
 # Dashboard API
 # =============================================================================
 
@@ -151,12 +176,9 @@ class SkillFeaturedInput(Schema):
 def get_dashboard(request):
     """Platform overview dashboard data."""
     now = timezone.now()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     seven_days_ago = now - timedelta(days=7)
 
     total_users = User.objects.count()
-    new_users_today = User.objects.filter(date_joined__gte=today_start).count()
-    new_users_7d = User.objects.filter(date_joined__gte=seven_days_ago).count()
     active_users_7d = User.objects.filter(last_login__gte=seven_days_ago).count()
 
     total_skills = Skill.objects.count()
@@ -173,8 +195,8 @@ def get_dashboard(request):
 
     return {
         "total_users": total_users,
-        "new_users_today": new_users_today,
-        "new_users_7d": new_users_7d,
+        "new_users_today": 0,
+        "new_users_7d": 0,
         "total_skills": total_skills,
         "total_articles": total_articles,
         "total_bounties": total_bounties,
@@ -192,7 +214,7 @@ def get_dashboard(request):
 @moderator_required
 def list_users(request, page: int = 1, page_size: int = 20,
                search: str = "", role: str = "", level: str = "",
-               sort: str = "-date_joined"):
+               sort: str = "-id"):
     """List users with search and filters."""
     qs = User.objects.all()
 
@@ -203,38 +225,24 @@ def list_users(request, page: int = 1, page_size: int = 20,
             Q(display_name__icontains=search)
         )
     if role:
-        qs = qs.filter(role=role)
+        try:
+            qs = qs.filter(role=int(role))
+        except ValueError:
+            pass
     if level:
-        qs = qs.filter(level=level)
+        qs = qs.filter(community_level=level)
 
-    # Validate sort field
-    valid_sorts = ["date_joined", "-date_joined", "credit_score", "-credit_score",
-                   "balance", "-balance", "username", "-username"]
+    valid_sorts = ["id", "-id", "credit_score", "-credit_score",
+                   "quota", "-quota", "username", "-username"]
     if sort not in valid_sorts:
-        sort = "-date_joined"
+        sort = "-id"
 
     total = qs.count()
     offset = (page - 1) * page_size
     users = qs.order_by(sort)[offset:offset + page_size]
 
     return {
-        "users": [
-            {
-                "id": u.id,
-                "username": u.username,
-                "email": u.email,
-                "display_name": u.display_name,
-                "role": u.role,
-                "level": u.level,
-                "credit_score": u.credit_score,
-                "balance": float(u.balance),
-                "frozen_balance": float(u.frozen_balance),
-                "is_active": u.is_active,
-                "date_joined": u.date_joined.isoformat(),
-                "last_login": u.last_login.isoformat() if u.last_login else None,
-            }
-            for u in users
-        ],
+        "users": [_user_list_item(u) for u in users],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -250,34 +258,35 @@ def get_user_detail(request, user_id: int):
     except User.DoesNotExist:
         return 404, {"message": "用户不存在"}
 
+    profile = get_or_create_profile(u)
+
     return 200, {
         "id": u.id,
         "username": u.username,
         "email": u.email,
         "display_name": u.display_name,
-        "bio": u.bio,
-        "avatar_url": build_absolute_media_url(request, u.avatar_url),
+        "bio": profile.bio,
+        "avatar_url": build_absolute_media_url(request, profile.avatar_url),
         "role": u.role,
-        "level": u.level,
+        "level": u.community_level,
         "credit_score": u.credit_score,
-        "balance": float(u.balance),
-        "frozen_balance": float(u.frozen_balance),
+        "balance": _quota_to_usd(u.quota),
+        "frozen_balance": _quota_to_usd(profile.frozen_balance),
         "is_active": u.is_active,
-        "date_joined": u.date_joined.isoformat(),
         "last_login": u.last_login.isoformat() if u.last_login else None,
         "skills_count": Skill.objects.filter(creator=u).count(),
         "articles_count": Article.objects.filter(author=u).count(),
         "transactions_count": Transaction.objects.filter(user=u).count(),
-        "invitees_count": u.invitees.count(),
+        "invitees_count": u.invitees.count() if hasattr(u, 'invitees') else 0,
     }
 
 
 @router.patch("/users/{user_id}/role", response={200: MessageOutput, 404: MessageOutput})
 @admin_required
 def update_user_role(request, user_id: int, data: RoleUpdateInput):
-    """Update user role. Admin only."""
-    if data.role not in [r.value for r in UserRole]:
-        return 404, {"message": f"无效角色: {data.role}"}
+    """Update user role. Admin only. Valid roles: 1=common, 5=moderator, 10=admin."""
+    if data.role not in ROLE_LABELS:
+        return 404, {"message": f"无效角色: {data.role}，有效值: {list(ROLE_LABELS.keys())}"}
 
     try:
         user = User.objects.get(id=user_id)
@@ -287,10 +296,14 @@ def update_user_role(request, user_id: int, data: RoleUpdateInput):
     if user.id == request.auth.id:
         return 404, {"message": "不能修改自己的角色"}
 
-    old_role = user.role
+    if data.role >= request.auth.role and request.auth.role < 100:
+        return 404, {"message": "不能设置等于或高于自己的角色"}
+
+    old_label = ROLE_LABELS.get(user.role, str(user.role))
+    new_label = ROLE_LABELS.get(data.role, str(data.role))
     user.role = data.role
     user.save(update_fields=["role"])
-    return 200, {"message": f"用户 {user.username} 角色已从 {old_role} 更改为 {data.role}"}
+    return 200, {"message": f"用户 {user.username} 角色已从 {old_label} 更改为 {new_label}"}
 
 
 @router.post("/users/{user_id}/ban", response={200: MessageOutput, 404: MessageOutput})
@@ -305,11 +318,11 @@ def ban_user(request, user_id: int, data: BanInput):
     if user.id == request.auth.id:
         return 404, {"message": "不能封禁自己"}
 
-    if user.role == "ADMIN":
+    if user.role >= ROLE_ADMIN:
         return 404, {"message": "不能封禁管理员"}
 
-    user.is_active = False
-    user.save(update_fields=["is_active"])
+    user.status = 2  # Go: UserStatusDisabled = 2
+    user.save(update_fields=["status"])
 
     from apps.notifications.services import NotificationService
     NotificationService.send(
@@ -331,8 +344,8 @@ def unban_user(request, user_id: int):
     except User.DoesNotExist:
         return 404, {"message": "用户不存在"}
 
-    user.is_active = True
-    user.save(update_fields=["is_active"])
+    user.status = 1  # Go: UserStatusEnabled = 1
+    user.save(update_fields=["status"])
 
     return 200, {"message": f"用户 {user.username} 已解封"}
 
@@ -477,7 +490,6 @@ def get_finance_report(request):
     seven_days_ago = now - timedelta(days=7)
     thirty_days_ago = now - timedelta(days=30)
 
-    # Totals
     total_deposits = Transaction.objects.filter(
         transaction_type=TransactionType.DEPOSIT
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
@@ -486,12 +498,11 @@ def get_finance_report(request):
         transaction_type=TransactionType.PLATFORM_FEE
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-    total_circulation = User.objects.aggregate(
-        total=Sum("balance"))["total"] or Decimal("0")
-    total_frozen = User.objects.aggregate(
-        total=Sum("frozen_balance"))["total"] or Decimal("0")
+    # Total circulation from users.quota
+    total_quota = User.objects.aggregate(total=Sum("quota"))["total"] or 0
+    total_frozen = CommunityProfile.objects.aggregate(
+        total=Sum("frozen_balance"))["total"] or 0
 
-    # 7-day
     deposits_7d = Transaction.objects.filter(
         transaction_type=TransactionType.DEPOSIT,
         created_at__gte=seven_days_ago,
@@ -502,7 +513,6 @@ def get_finance_report(request):
         created_at__gte=seven_days_ago,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-    # 30-day
     deposits_30d = Transaction.objects.filter(
         transaction_type=TransactionType.DEPOSIT,
         created_at__gte=thirty_days_ago,
@@ -513,7 +523,6 @@ def get_finance_report(request):
         created_at__gte=thirty_days_ago,
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-    # Daily breakdown (last 30 days)
     from django.db.models.functions import TruncDate
 
     daily_deposits_qs = (
@@ -549,8 +558,8 @@ def get_finance_report(request):
     return {
         "total_deposits": float(total_deposits),
         "total_fees": float(abs(total_fees)),
-        "total_circulation": float(total_circulation),
-        "total_frozen": float(total_frozen),
+        "total_circulation": _quota_to_usd(total_quota),
+        "total_frozen": _quota_to_usd(total_frozen),
         "deposits_7d": float(deposits_7d),
         "fees_7d": float(abs(fees_7d)),
         "deposits_30d": float(deposits_30d),
