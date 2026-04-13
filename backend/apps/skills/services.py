@@ -616,9 +616,18 @@ class SkillService:
             if not version_obj:
                 raise ValueError("指定版本不存在或未通过审核")
         else:
+            # Resolve the version matching the skill's promoted current_version,
+            # not simply the most recently created approved version.
             version_obj = skill.versions.filter(
+                version=skill.current_version,
                 status=VersionStatus.APPROVED,
-            ).order_by("-created_at").first()
+            ).first()
+            if not version_obj:
+                # Fallback: if current_version doesn't match any approved version
+                # (e.g. legacy data), try the latest approved.
+                version_obj = skill.versions.filter(
+                    status=VersionStatus.APPROVED,
+                ).order_by("-created_at").first()
 
         if not version_obj:
             raise ValueError("没有可用的已审核版本")
