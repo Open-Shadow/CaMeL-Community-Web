@@ -342,12 +342,21 @@ class SkillService:
             # For approved skills, live pointers stay unchanged until the new
             # version passes scan/admin review (see promote_version).
 
-            # Trim old versions beyond the 10 most recent
+            # Trim old versions beyond the 10 most recent, but never delete
+            # the live approved version that current_version points to.
             version_ids = list(
                 skill.versions.order_by("-created_at").values_list("id", flat=True)[10:]
             )
             if version_ids:
-                SkillVersion.objects.filter(id__in=version_ids).delete()
+                # Protect the version matching current_version from pruning
+                live_version = skill.versions.filter(
+                    version=skill.current_version,
+                    status=VersionStatus.APPROVED,
+                ).values_list("id", flat=True).first()
+                if live_version and live_version in version_ids:
+                    version_ids.remove(live_version)
+                if version_ids:
+                    SkillVersion.objects.filter(id__in=version_ids).delete()
 
         if content_changed and skill.status == SkillStatus.REJECTED:
             skill.status = SkillStatus.DRAFT
@@ -506,7 +515,6 @@ class SkillService:
             latest_version = skill.versions.filter(id=version_id).first()
         else:
             latest_version = skill.versions.order_by("-created_at").first()
-        is_version_update = skill.status == SkillStatus.APPROVED
 
         # Determine structured scan result
         if not passed:
@@ -516,10 +524,21 @@ class SkillService:
         else:
             scan_result = ScanResult.PASS_CLEAN
 
-        # Persist scan result and warnings on the version
+        # Persist scan result and warnings on the version regardless of state
         if latest_version:
             latest_version.scan_result = scan_result
             latest_version.scan_warnings = warnings or []
+
+        # Gate on the scanned object's pending state.  If the skill/version
+        # changed state while the async scan was running, the result is stale —
+        # save the scan metadata but don't apply state transitions.
+        if latest_version and latest_version.status != VersionStatus.SCANNING:
+            latest_version.save(update_fields=["scan_result", "scan_warnings"])
+            return skill
+        if not latest_version and skill.status != SkillStatus.SCANNING:
+            return skill
+
+        is_version_update = skill.status == SkillStatus.APPROVED
 
         if not passed:
             if is_version_update:
@@ -745,18 +764,19 @@ class SkillService:
                 pending = skill.versions.filter(
                     status=VersionStatus.SCANNING,
                 ).order_by("-created_at").first()
-            if not pending:
-                raise ValueError("没有待审核的新版本")
-            pending.status = VersionStatus.REJECTED
-            pending.save(update_fields=["status"])
-            NotificationService.send(
-                recipient=skill.creator,
-                notification_type="skill_reviewed",
-                title="新版本审核未通过",
-                content=f"「{skill.name}」v{pending.version} 未通过审核：{review_reason}",
-                reference_id=str(skill.id),
-            )
-            return skill
+            if pending:
+                pending.status = VersionStatus.REJECTED
+                pending.save(update_fields=["status"])
+                NotificationService.send(
+                    recipient=skill.creator,
+                    notification_type="skill_reviewed",
+                    title="新版本审核未通过",
+                    content=f"「{skill.name}」v{pending.version} 未通过审核：{review_reason}",
+                    reference_id=str(skill.id),
+                )
+                return skill
+            # No pending version — reject/unpublish the approved skill itself
+            # (fall through to the rejection block below)
 
         # New skill rejection (SCANNING → REJECTED)
         skill.status = SkillStatus.REJECTED

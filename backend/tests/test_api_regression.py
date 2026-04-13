@@ -244,9 +244,11 @@ class TestAdminRejectVersionScoped:
         assert live.status == VersionStatus.APPROVED
 
     @pytest.mark.django_db
-    def test_reject_no_pending_version_raises(self, approved_skill):
-        with pytest.raises(ValueError, match="没有待审核的新版本"):
-            SkillService.admin_reject(approved_skill, reason="No pending")
+    def test_reject_approved_skill_without_pending_version_unpublishes(self, approved_skill):
+        """When no pending version exists, admin_reject unpublishes the approved skill."""
+        result = SkillService.admin_reject(approved_skill, reason="Policy violation")
+        assert result.status == SkillStatus.REJECTED
+        assert "Policy violation" in result.rejection_reason
 
     @pytest.mark.django_db
     def test_reject_new_skill_sets_rejected(self, user):
