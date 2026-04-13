@@ -90,9 +90,15 @@ class SkillAdmin(admin.ModelAdmin):
     @admin.action(description="恢复上架")
     def reinstate_selected(self, request, queryset):
         from apps.skills.services import SkillService
+        from apps.skills.models import SkillReport
         updated = 0
         for skill in queryset.filter(status="ARCHIVED"):
-            SkillService.reinstate_quarantined(skill)
+            # Distinguish quarantine-archived (has reports) from manual archive
+            has_reports = SkillReport.objects.filter(skill=skill).exists()
+            if has_reports:
+                SkillService.reinstate_quarantined(skill)
+            else:
+                SkillService.restore(skill)
             updated += 1
         self.message_user(request, f"已恢复 {updated} 个 Skill")
 
@@ -135,7 +141,17 @@ class SkillReportAdmin(admin.ModelAdmin):
             skill = Skill.objects.get(id=skill_id)
             remaining = SkillReport.objects.filter(skill=skill).count()
             if remaining < REPORT_QUARANTINE_THRESHOLD:
-                if skill.status == "ARCHIVED" or skill.versions.filter(status=VersionStatus.ARCHIVED).exists():
+                # Only reinstate if this skill was quarantined by reports.
+                # Check that the quarantine system archived the skill or its
+                # current version — not a manual admin ban or creator archive.
+                was_quarantined = (
+                    skill.status == "ARCHIVED"
+                    or skill.versions.filter(
+                        status=VersionStatus.ARCHIVED,
+                        version=skill.current_version,
+                    ).exists()
+                )
+                if was_quarantined:
                     SkillService.reinstate_quarantined(skill)
                     reinstated += 1
         self.message_user(request, f"已驳回 {deleted} 条举报，解除隔离 {reinstated} 个 Skill")

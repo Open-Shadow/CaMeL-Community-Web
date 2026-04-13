@@ -299,28 +299,12 @@ export async function purchaseSkill(skillId: number) {
 }
 
 export async function downloadSkill(skillId: number, version?: string) {
-  // Backend requires auth and returns a 302 redirect to a pre-signed URL.
-  // Use fetch with redirect: 'manual' to capture the Location header without
-  // following the cross-origin redirect (Axios in browsers always follows redirects,
-  // which fails on cross-origin S3/MinIO presigned URLs without CORS).
-  const params = version ? `?version=${encodeURIComponent(version)}` : ''
-  const token = localStorage.getItem('access_token')
-  const headers: Record<string, string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
-  const response = await fetch(`${api.defaults.baseURL}/skills/${skillId}/download${params}`, {
-    headers,
-    redirect: 'manual',
-  })
-
-  // opaqueredirect type means we got a redirect but can't read Location.
-  // In that case, fall back to opening the endpoint directly.
-  const downloadUrl = response.headers.get('location')
-  if (downloadUrl) {
-    window.open(downloadUrl, '_blank')
-  } else {
-    // Fallback: let the browser handle the redirect natively
-    window.open(`${api.defaults.baseURL}/skills/${skillId}/download${params}`, '_blank')
+  // Backend returns a JSON body with the pre-signed download URL.
+  const params: Record<string, string> = {}
+  if (version) params.version = version
+  const response = await api.get<{ url: string }>(`/skills/${skillId}/download`, { params })
+  if (response.data.url) {
+    window.open(response.data.url, '_blank')
   }
 }
 

@@ -336,8 +336,7 @@ def download_skill(request, skill_id: int, version: Optional[str] = None):
     skill.download_count += 1
     skill.save(update_fields=["download_count"])
 
-    from django.http import HttpResponseRedirect
-    return HttpResponseRedirect(url)
+    return {"url": url}
 
 
 @router.post("/{skill_id}/call", response=SkillCallOut, auth=AuthBearer())
