@@ -50,6 +50,7 @@ def _skill_out(skill: Skill, request_user=None) -> dict:
         "creator_name": skill.creator.display_name or skill.creator.username,
         "created_at": skill.created_at.isoformat(),
         "updated_at": skill.updated_at.isoformat(),
+        "has_package": bool(skill.package_file),
     }
     # Indicate if requester has purchased (for detail page UI decisions)
     if request_user:
@@ -207,7 +208,12 @@ def list_purchased_skills(request):
 @router.get("/{skill_id}", response=SkillOut, auth=OptionalAuthBearer())
 def get_skill(request, skill_id: int):
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
-    return _skill_out(skill, get_optional_user(request))
+    user = get_optional_user(request)
+    # Unpublished skills are only visible to their creator
+    if skill.status not in (SkillStatus.APPROVED, SkillStatus.ARCHIVED):
+        if not user or user.id != skill.creator_id:
+            raise HttpError(404, "Not found")
+    return _skill_out(skill, user)
 
 
 @router.patch("/{skill_id}", response=SkillOut, auth=AuthBearer())

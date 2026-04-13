@@ -24,6 +24,7 @@ export interface SkillSummary {
   created_at: string
   updated_at: string
   has_purchased: boolean
+  has_package?: boolean
 }
 
 export interface SkillCallResult {

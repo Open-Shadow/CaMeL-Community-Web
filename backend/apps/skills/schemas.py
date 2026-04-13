@@ -47,6 +47,7 @@ class SkillOut(Schema):
     created_at: str
     updated_at: str
     has_purchased: bool = False  # only present when authenticated
+    has_package: bool = False  # true when a downloadable package file exists
 
 
 class SkillCallInput(Schema):

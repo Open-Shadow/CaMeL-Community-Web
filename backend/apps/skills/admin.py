@@ -138,10 +138,16 @@ class SkillReportAdmin(admin.ModelAdmin):
             skill = Skill.objects.get(id=skill_id)
             remaining = SkillReport.objects.filter(skill=skill).count()
             if remaining < REPORT_QUARANTINE_THRESHOLD:
-                # Only reinstate when the whole skill was quarantined
-                # (skill.status == ARCHIVED). Version-level archives may be
-                # manual admin bans that should not be undone by report dismissal.
-                if skill.status == "ARCHIVED":
+                # Case 1: full quarantine — skill itself is ARCHIVED
+                # Case 2: fallback quarantine — skill is APPROVED but the
+                #   quarantined version is ARCHIVED (older approved was promoted)
+                # In both cases reinstate_quarantined() knows what to do.
+                # Manual admin bans on versions are a separate action and are
+                # not undone here because they don't generate SkillReport rows.
+                has_archived_version = skill.versions.filter(
+                    status=VersionStatus.ARCHIVED,
+                ).exists()
+                if skill.status == "ARCHIVED" or has_archived_version:
                     SkillService.reinstate_quarantined(skill)
                     reinstated += 1
         self.message_user(request, f"已驳回 {deleted} 条举报，解除隔离 {reinstated} 个 Skill")
