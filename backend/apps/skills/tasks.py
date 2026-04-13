@@ -88,8 +88,16 @@ def run_skill_scan(skill_id: int):
     if metadata_failed:
         passed = False
 
+    # Determine structured result
+    if not passed:
+        result = "FAIL"
+    elif warnings:
+        result = "WARN"
+    else:
+        result = "PASS"
+
     SkillService.complete_scan(
         skill, passed=passed, issues=issues, warnings=warnings if warnings else None,
     )
-    return {"passed": passed, "issues": issues, "warnings": warnings}
+    return {"result": result, "passed": passed, "issues": issues, "warnings": warnings}
 

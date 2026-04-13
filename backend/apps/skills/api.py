@@ -333,6 +333,8 @@ def list_versions(request, skill_id: int):
             "version": version.version,
             "changelog": version.changelog,
             "status": version.status,
+            "scan_result": version.scan_result,
+            "scan_warnings": version.scan_warnings,
             "created_at": version.created_at.isoformat(),
         }
         for version in versions

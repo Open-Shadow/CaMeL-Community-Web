@@ -79,6 +79,8 @@ class SkillVersionOut(Schema):
     version: str
     changelog: str
     status: str
+    scan_result: str = ""
+    scan_warnings: list[str] = []
     created_at: str
 
 

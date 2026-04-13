@@ -18,6 +18,7 @@ from apps.payments.services import PaymentError, PaymentsService, quantize_amoun
 from apps.search.services import SearchService
 from apps.skills.models import (
     PricingModel,
+    ScanResult,
     Skill,
     SkillCall,
     SkillCategory,
@@ -302,6 +303,12 @@ class SkillService:
                         raise
                     # Skip unparseable old version
 
+            # Reject duplicate version strings (any status)
+            if skill.versions.filter(version=new_version).exists():
+                raise ValueError(
+                    f"版本 {new_version} 已存在，请使用更高的版本号"
+                )
+
             new_sv = SkillVersion.objects.create(
                 skill=skill,
                 version=new_version,
@@ -433,12 +440,25 @@ class SkillService:
         latest_version = skill.versions.order_by("-created_at").first()
         is_version_update = skill.status == SkillStatus.APPROVED
 
+        # Determine structured scan result
+        if not passed:
+            scan_result = ScanResult.FAIL
+        elif warnings:
+            scan_result = ScanResult.WARN
+        else:
+            scan_result = ScanResult.PASS_CLEAN
+
+        # Persist scan result and warnings on the version
+        if latest_version:
+            latest_version.scan_result = scan_result
+            latest_version.scan_warnings = warnings or []
+
         if not passed:
             if is_version_update:
                 # Version-scoped failure: reject the version, keep skill approved
                 if latest_version:
                     latest_version.status = VersionStatus.REJECTED
-                    latest_version.save(update_fields=["status"])
+                    latest_version.save(update_fields=["status", "scan_result", "scan_warnings"])
                 NotificationService.send(
                     recipient=skill.creator,
                     notification_type="skill_reviewed",
@@ -452,7 +472,7 @@ class SkillService:
                 skill.save(update_fields=["status", "rejection_reason"])
                 if latest_version:
                     latest_version.status = VersionStatus.REJECTED
-                    latest_version.save(update_fields=["status"])
+                    latest_version.save(update_fields=["status", "scan_result", "scan_warnings"])
                 NotificationService.send(
                     recipient=skill.creator,
                     notification_type="skill_reviewed",
@@ -462,12 +482,6 @@ class SkillService:
                 )
             return skill
 
-        # Persist warnings on the version if any
-        if warnings and latest_version:
-            latest_version.changelog = (
-                latest_version.changelog + "\n⚠️ " + "；".join(warnings)
-            ).strip()
-
         # Check trust level for auto-publish
         creator_score = skill.creator.credit_score
         is_trusted = creator_score >= CreditLevelConfig.CRAFTSMAN_MIN
@@ -475,7 +489,7 @@ class SkillService:
         if is_trusted:
             if latest_version:
                 latest_version.status = VersionStatus.APPROVED
-                latest_version.save(update_fields=["status", "changelog"])
+                latest_version.save(update_fields=["status", "scan_result", "scan_warnings"])
             if is_version_update:
                 # Promote the approved version to live pointers
                 cls._promote_version(skill, latest_version)
@@ -501,7 +515,7 @@ class SkillService:
                 )
         else:
             if latest_version:
-                latest_version.save(update_fields=["changelog"])
+                latest_version.save(update_fields=["scan_result", "scan_warnings"])
             # Low-trust users: keep pending, needs admin approval
             msg = "新版本扫描通过，等待人工审核" if is_version_update else "Skill 扫描通过，等待人工审核"
             NotificationService.send(
@@ -1118,14 +1132,34 @@ class SkillReportService:
         if created:
             total_reports = SkillReport.objects.filter(skill=skill).count()
             if total_reports >= REPORT_QUARANTINE_THRESHOLD and skill.status == SkillStatus.APPROVED:
-                skill.status = SkillStatus.ARCHIVED
-                skill.save(update_fields=["status", "updated_at"])
-                SearchService.remove_skill(skill.id)
+                # Version-scoped quarantine: archive only the current live version,
+                # keep older safe approved versions accessible to entitled users.
+                current_version = skill.versions.filter(
+                    version=skill.current_version,
+                    status=VersionStatus.APPROVED,
+                ).first()
+                if current_version:
+                    current_version.status = VersionStatus.ARCHIVED
+                    current_version.save(update_fields=["status"])
+
+                # Check if any other approved versions remain
+                fallback = skill.versions.filter(
+                    status=VersionStatus.APPROVED,
+                ).order_by("-created_at").first()
+                if fallback:
+                    # Promote the latest safe version to live pointers
+                    SkillService._promote_version(skill, fallback)
+                else:
+                    # No safe versions left — archive the whole skill
+                    skill.status = SkillStatus.ARCHIVED
+                    skill.save(update_fields=["status", "updated_at"])
+                    SearchService.remove_skill(skill.id)
+
                 NotificationService.send(
                     recipient=skill.creator,
                     notification_type="skill_reported",
-                    title="Skill 已被隔离",
-                    content=f"「{skill.name}」因多次举报已被暂时隔离，等待管理员审核。",
+                    title="Skill 版本已被隔离",
+                    content=f"「{skill.name}」v{skill.current_version} 因多次举报已被隔离，等待管理员审核。",
                     reference_id=str(skill.id),
                 )
 

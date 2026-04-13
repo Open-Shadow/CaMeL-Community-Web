@@ -9,7 +9,7 @@ from ninja import Router, Schema
 from common.permissions import AuthBearer, admin_required, moderator_required
 from apps.accounts.models import User, UserRole, sync_admin_flags
 from apps.payments.models import Transaction, TransactionType
-from apps.skills.models import Skill, SkillStatus
+from apps.skills.models import Skill, SkillStatus, VersionStatus
 from apps.skills.services import SkillService
 from apps.workshop.models import Article
 from apps.bounties.models import Bounty
@@ -124,6 +124,9 @@ class SkillReviewQueueItemOutput(Schema):
     creator_name: str
     created_at: str
     updated_at: str
+    # Version-update review context (present when an approved skill has a pending version)
+    pending_version: str | None = None
+    pending_version_changelog: str | None = None
 
 
 class SkillReviewQueueOutput(Schema):
@@ -364,7 +367,7 @@ def adjust_user_credit(request, user_id: int, data: CreditAdjustInput):
 # =============================================================================
 
 def _skill_queue_item_out(skill: Skill) -> dict:
-    return {
+    out = {
         "id": skill.id,
         "name": skill.name,
         "description": skill.description,
@@ -380,6 +383,15 @@ def _skill_queue_item_out(skill: Skill) -> dict:
         "created_at": skill.created_at.isoformat(),
         "updated_at": skill.updated_at.isoformat(),
     }
+    # Attach pending version metadata for approved skills with pending updates
+    if skill.status == SkillStatus.APPROVED:
+        pending = skill.versions.filter(
+            status=VersionStatus.SCANNING,
+        ).order_by("-created_at").first()
+        if pending:
+            out["pending_version"] = pending.version
+            out["pending_version_changelog"] = pending.changelog
+    return out
 
 
 @router.get("/skills/review-queue", response=SkillReviewQueueOutput)
@@ -393,7 +405,11 @@ def list_skill_review_queue(
 ):
     queryset = Skill.objects.select_related("creator")
     if status == "pending":
-        queryset = queryset.filter(status=SkillStatus.SCANNING)
+        # Include both new skills in SCANNING and approved skills with pending version updates
+        queryset = queryset.filter(
+            Q(status=SkillStatus.SCANNING)
+            | Q(status=SkillStatus.APPROVED, versions__status=VersionStatus.SCANNING)
+        ).distinct()
     elif status == "rejected":
         queryset = queryset.filter(status=SkillStatus.REJECTED)
     elif status == "approved":

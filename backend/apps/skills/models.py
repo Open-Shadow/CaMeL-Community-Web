@@ -35,6 +35,12 @@ class VersionStatus(models.TextChoices):
     ARCHIVED = "ARCHIVED", "已归档"
 
 
+class ScanResult(models.TextChoices):
+    PASS_CLEAN = "PASS", "通过"
+    WARN = "WARN", "通过但有警告"
+    FAIL = "FAIL", "未通过"
+
+
 class ReportReason(models.TextChoices):
     MALICIOUS_CODE = "MALICIOUS_CODE", "恶意代码"
     FALSE_DESCRIPTION = "FALSE_DESCRIPTION", "虚假描述"
@@ -84,6 +90,10 @@ class SkillVersion(models.Model):
     status = models.CharField(
         max_length=20, choices=VersionStatus.choices, default=VersionStatus.SCANNING,
     )
+    scan_result = models.CharField(
+        max_length=10, choices=ScanResult.choices, blank=True, default="",
+    )
+    scan_warnings = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
