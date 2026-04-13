@@ -13,6 +13,7 @@ import MarketplacePage from '@/pages/marketplace/MarketplacePage'
 import SkillDetailPage from '@/pages/marketplace/SkillDetailPage'
 import CreateSkillPage from '@/pages/marketplace/CreateSkillPage'
 import MySkillsPage from '@/pages/marketplace/MySkillsPage'
+import PurchasedSkillsPage from '@/pages/marketplace/PurchasedSkillsPage'
 import BountyListPage from '@/pages/bounty/BountyListPage'
 import BountyDetailPage from '@/pages/bounty/BountyDetailPage'
 import CreateBountyPage from '@/pages/bounty/CreateBountyPage'
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
       { path: 'marketplace', element: <MarketplacePage /> },
       { path: 'marketplace/create', element: <CreateSkillPage /> },
       { path: 'marketplace/mine', element: <MySkillsPage /> },
+      { path: 'marketplace/purchased', element: <PurchasedSkillsPage /> },
       { path: 'marketplace/:id', element: <SkillDetailPage /> },
       { path: 'bounty', element: <BountyListPage /> },
       { path: 'bounty/mine', element: <BountyListPage /> },

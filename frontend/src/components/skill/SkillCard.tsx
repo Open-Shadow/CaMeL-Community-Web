@@ -35,7 +35,7 @@ export default function SkillCard({ skill, onClick }: SkillCardProps) {
           <span className="text-sm font-semibold text-amber-600">
             {skill.pricing_model === 'FREE'
               ? '免费'
-              : `${formatCurrency(skill.price_per_use)}/次`}
+              : `${formatCurrency(skill.price)}`}
           </span>
         </div>
 

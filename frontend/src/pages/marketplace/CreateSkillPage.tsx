@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Upload } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -19,18 +20,23 @@ const CATEGORIES = [
   { value: 'MISC', label: '其他' },
 ]
 
+const MAX_PACKAGE_SIZE = 10 * 1024 * 1024 // 10 MB
+
 export default function CreateSkillPage() {
   const navigate = useNavigate()
   const { isAuthenticated, isLoading } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState({
     name: '',
     description: '',
-    system_prompt: '',
     category: 'CODE_DEV',
     tags: [] as string[],
-    pricing_model: 'FREE' as 'FREE' | 'PER_USE',
-    price_per_use: '',
+    pricing_model: 'FREE' as 'FREE' | 'PAID',
+    price: '',
+    changelog: '',
   })
+  const [packageFile, setPackageFile] = useState<File | null>(null)
+  const [dragOver, setDragOver] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -44,12 +50,43 @@ export default function CreateSkillPage() {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
+  const handleFile = useCallback((file: File) => {
+    if (!file.name.endsWith('.zip')) {
+      setError('请上传 .zip 格式的文件')
+      return
+    }
+    if (file.size > MAX_PACKAGE_SIZE) {
+      setError(`文件大小不能超过 ${MAX_PACKAGE_SIZE / 1024 / 1024} MB`)
+      return
+    }
+    setPackageFile(file)
+    setError('')
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setDragOver(false)
+      const file = e.dataTransfer.files[0]
+      if (file) handleFile(file)
+    },
+    [handleFile],
+  )
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
 
-    if (!form.name || !form.description || !form.system_prompt) {
-      setError('请补全技能名称、skill简介和skill文件')
+    if (!form.name || !form.description) {
+      setError('请补全技能名称和简介')
+      return
+    }
+    if (!packageFile) {
+      setError('请上传 Skill 包（.zip）')
+      return
+    }
+    if (form.pricing_model === 'PAID' && (!form.price || Number(form.price) < 0.01 || Number(form.price) > 10)) {
+      setError('付费 Skill 的价格范围为 $0.01 ~ $10.00')
       return
     }
 
@@ -58,14 +95,12 @@ export default function CreateSkillPage() {
       const created = await createSkill({
         name: form.name,
         description: form.description,
-        system_prompt: form.system_prompt,
         category: form.category,
         tags: form.tags,
         pricing_model: form.pricing_model,
-        price_per_use:
-          form.pricing_model === 'PER_USE' && form.price_per_use
-            ? Number(form.price_per_use)
-            : null,
+        price: form.pricing_model === 'PAID' && form.price ? Number(form.price) : undefined,
+        changelog: form.changelog || undefined,
+        package_file: packageFile,
       })
 
       const submitted = await submitSkill(created.id)
@@ -99,16 +134,43 @@ export default function CreateSkillPage() {
           <label className="text-sm font-medium mb-1 block">简介 *</label>
           <Textarea value={form.description} onChange={e => setField('description', e.target.value)} placeholder="描述技能的用途和效果" rows={2} required />
         </div>
+
         <div>
-          <label className="text-sm font-medium mb-1 block">skill文件 *</label>
-          <Textarea
-            value={form.system_prompt}
-            onChange={e => setField('system_prompt', e.target.value)}
-            placeholder="填写 skill 的核心执行内容"
-            rows={6}
-            required
-          />
+          <label className="text-sm font-medium mb-1 block">Skill 包 (.zip) *</label>
+          <div
+            className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+              dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
+            {packageFile ? (
+              <div className="text-center">
+                <p className="font-medium">{packageFile.name}</p>
+                <p className="text-sm text-muted-foreground">{(packageFile.size / 1024).toFixed(1)} KB</p>
+              </div>
+            ) : (
+              <div className="text-center">
+                <p className="font-medium">拖放 .zip 文件到这里，或点击选择</p>
+                <p className="text-sm text-muted-foreground">ZIP 包需包含 SKILL.md，最大 10 MB</p>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleFile(file)
+              }}
+            />
+          </div>
         </div>
+
         <div>
           <label className="text-sm font-medium mb-1 block">分类</label>
           <select className="w-full border rounded-md px-3 py-2 text-sm bg-background"
@@ -127,28 +189,34 @@ export default function CreateSkillPage() {
         <div>
           <label className="text-sm font-medium mb-1 block">定价模式</label>
           <div className="flex gap-3">
-            {(['FREE', 'PER_USE'] as const).map(m => (
+            {(['FREE', 'PAID'] as const).map(m => (
               <Button key={m} type="button" variant={form.pricing_model === m ? 'default' : 'outline'} size="sm"
                 onClick={() => setField('pricing_model', m)}>
-                {m === 'FREE' ? '免费' : '按次付费'}
+                {m === 'FREE' ? '免费' : '一次性购买'}
               </Button>
             ))}
           </div>
-          {form.pricing_model === 'PER_USE' && (
+          {form.pricing_model === 'PAID' && (
             <Input
               className="mt-2 w-40"
               type="number"
               step="0.01"
               min="0.01"
               max="10"
-              value={form.price_per_use}
-              onChange={e => setField('price_per_use', e.target.value)}
-              placeholder="每次价格 ($)"
+              value={form.price}
+              onChange={e => setField('price', e.target.value)}
+              placeholder="价格 ($)"
             />
           )}
-          <p className="mt-2 text-xs text-muted-foreground">
-            Phase 1 先打通创建、审核和调用链路，付费结算会在后续阶段接入。
-          </p>
+        </div>
+        <div>
+          <label className="text-sm font-medium mb-1 block">变更日志（可选）</label>
+          <Textarea
+            value={form.changelog}
+            onChange={e => setField('changelog', e.target.value)}
+            placeholder="描述此版本的变更内容"
+            rows={2}
+          />
         </div>
         {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
         <Button type="submit" disabled={submitting} className="w-full">

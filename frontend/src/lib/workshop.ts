@@ -12,8 +12,8 @@ export interface RelatedSkillSummary {
   id: number
   name: string
   category: string
-  pricing_model: 'FREE' | 'PER_USE'
-  price_per_use: number | null
+  pricing_model: 'FREE' | 'PAID'
+  price: number | null
   total_calls: number
   avg_rating: number
   creator_name: string

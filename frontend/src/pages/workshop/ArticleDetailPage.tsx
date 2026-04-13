@@ -317,7 +317,7 @@ export default function ArticleDetailPage() {
                 <div className="text-sm text-slate-600">
                   {article.related_skill.pricing_model === 'FREE'
                     ? '免费'
-                    : `${formatCurrency(article.related_skill.price_per_use)}/次`}
+                    : `${formatCurrency(article.related_skill.price)}`}
                 </div>
                 <Button
                   className="w-full"

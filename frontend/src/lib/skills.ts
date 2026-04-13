@@ -5,31 +5,29 @@ export interface SkillSummary {
   name: string
   slug: string
   description: string
-  system_prompt: string
-  user_prompt_template: string
-  output_format: string
-  example_input: string
-  example_output: string
   category: string
   tags: string[]
-  pricing_model: 'FREE' | 'PER_USE'
-  price_per_use: number | null
-  status: 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
+  pricing_model: 'FREE' | 'PAID'
+  price: number | null
+  status: 'DRAFT' | 'SCANNING' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
   is_featured: boolean
   current_version: number
   total_calls: number
   avg_rating: number
   review_count: number
   rejection_reason: string
+  readme_html: string
+  package_size: number
+  download_count: number
   creator_id: number
   creator_name: string
   created_at: string
   updated_at: string
+  has_purchased: boolean
 }
 
 export interface SkillCallResult {
   output_text: string
-  amount_charged: number
   duration_ms: number | null
 }
 
@@ -52,11 +50,9 @@ export interface SkillReview {
 
 export interface SkillVersion {
   id: number
-  version: number
-  system_prompt: string
-  user_prompt_template: string
-  change_note: string
-  is_major: boolean
+  version: string
+  changelog: string
+  status: string
   created_at: string
 }
 
@@ -66,8 +62,8 @@ export interface TrendingSkill {
   slug: string
   description: string
   category: string
-  pricing_model: 'FREE' | 'PER_USE'
-  price_per_use: number | null
+  pricing_model: 'FREE' | 'PAID'
+  price: number | null
   total_calls: number
   avg_rating: number
   review_count: number
@@ -93,7 +89,7 @@ export interface SkillIncomeDashboard {
 
 export interface SkillUsagePreference {
   skill_id: number
-  locked_version: number | null
+  locked_version: string | null
   auto_follow_latest: boolean
 }
 
@@ -105,18 +101,26 @@ export interface SkillListParams {
   page_size?: number
 }
 
-export interface SkillPayload {
+export interface SkillCreatePayload {
   name: string
   description: string
-  system_prompt: string
-  user_prompt_template?: string
-  output_format?: string
-  example_input?: string
-  example_output?: string
   category: string
   tags: string[]
-  pricing_model: 'FREE' | 'PER_USE'
-  price_per_use?: number | null
+  pricing_model: 'FREE' | 'PAID'
+  price?: number | null
+  changelog?: string
+  package_file: File
+}
+
+export interface SkillUpdatePayload {
+  name?: string
+  description?: string
+  category?: string
+  tags?: string[]
+  pricing_model?: 'FREE' | 'PAID'
+  price?: number | null
+  changelog?: string
+  package_file?: File
 }
 
 export async function listSkills(params: SkillListParams = {}) {
@@ -139,8 +143,19 @@ export async function getMySkills() {
   return response.data
 }
 
-export async function createSkill(payload: SkillPayload) {
-  const response = await api.post<SkillSummary>('/skills/', payload)
+export async function createSkill(payload: SkillCreatePayload) {
+  const formData = new FormData()
+  formData.append('package_file', payload.package_file)
+  formData.append('name', payload.name)
+  formData.append('description', payload.description)
+  formData.append('category', payload.category)
+  formData.append('tags', JSON.stringify(payload.tags))
+  formData.append('pricing_model', payload.pricing_model)
+  if (payload.price != null) formData.append('price', String(payload.price))
+  if (payload.changelog) formData.append('changelog', payload.changelog)
+  const response = await api.post<SkillSummary>('/skills/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
   return response.data
 }
 
@@ -211,8 +226,90 @@ export async function getSkillUsagePreference(skillId: number) {
 
 export async function updateSkillUsagePreference(
   skillId: number,
-  payload: { locked_version: number | null; auto_follow_latest: boolean },
+  payload: { locked_version: string | null; auto_follow_latest: boolean },
 ) {
   const response = await api.post<SkillUsagePreference>(`/skills/${skillId}/usage-preference`, payload)
+  return response.data
+}
+
+export async function updateSkill(skillId: number, payload: SkillUpdatePayload) {
+  const formData = new FormData()
+  if (payload.package_file) formData.append('package_file', payload.package_file)
+  if (payload.name != null) formData.append('name', payload.name)
+  if (payload.description != null) formData.append('description', payload.description)
+  if (payload.category != null) formData.append('category', payload.category)
+  if (payload.tags != null) formData.append('tags', JSON.stringify(payload.tags))
+  if (payload.pricing_model != null) formData.append('pricing_model', payload.pricing_model)
+  if (payload.price != null) formData.append('price', String(payload.price))
+  if (payload.changelog) formData.append('changelog', payload.changelog)
+  const response = await api.put<SkillSummary>(`/skills/${skillId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data
+}
+
+export interface SkillPurchaseResult {
+  id: number
+  skill_id: number
+  paid_amount: number
+  payment_type: string
+  created_at: string
+}
+
+export interface SkillPurchaseDetail {
+  id: number
+  name: string
+  slug: string
+  description: string
+  category: string
+  tags: string[]
+  pricing_model: 'FREE' | 'PAID'
+  price: number | null
+  status: string
+  is_featured: boolean
+  current_version: number
+  total_calls: number
+  avg_rating: number
+  review_count: number
+  rejection_reason: string
+  readme_html: string
+  package_size: number
+  download_count: number
+  creator_id: number
+  creator_name: string
+  created_at: string
+  updated_at: string
+  purchase_id: number
+  paid_amount: number
+  payment_type: string
+  purchased_at: string
+}
+
+export interface SkillReportResult {
+  id: number
+  skill_id: number
+  reason: string
+  detail: string
+  created_at: string
+}
+
+export async function purchaseSkill(skillId: number) {
+  const response = await api.post<SkillPurchaseResult>(`/skills/${skillId}/purchase`)
+  return response.data
+}
+
+export async function downloadSkill(skillId: number) {
+  // The backend returns a 302 redirect to a pre-signed URL.
+  // We use window.location to follow it as a download.
+  window.location.href = `/api/skills/${skillId}/download`
+}
+
+export async function listPurchasedSkills() {
+  const response = await api.get<SkillPurchaseDetail[]>('/skills/purchased')
+  return response.data
+}
+
+export async function reportSkill(skillId: number, payload: { reason: string; detail?: string }) {
+  const response = await api.post<SkillReportResult>(`/skills/${skillId}/report`, payload)
   return response.data
 }

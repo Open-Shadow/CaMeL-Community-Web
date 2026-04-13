@@ -15,7 +15,7 @@ interface SkillReviewQueueItem {
   category: string
   tags: string[]
   pricing_model: string
-  price_per_use: number | null
+  price: number | null
   status: string
   rejection_reason: string
   creator_id: number
@@ -172,12 +172,12 @@ export default function AdminSkillsPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <CardTitle className="text-lg">{item.name}</CardTitle>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={item.status === 'PENDING_REVIEW' ? 'default' : 'outline'}>{item.status}</Badge>
+                    <Badge variant={item.status === 'SCANNING' ? 'default' : 'outline'}>{item.status}</Badge>
                     {item.is_featured ? <Badge>精选</Badge> : null}
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  by {item.creator_name} · {item.category} · {item.pricing_model === 'FREE' ? '免费' : `$${(item.price_per_use ?? 0).toFixed(2)}/次`}
+                  by {item.creator_name} · {item.category} · {item.pricing_model === 'FREE' ? '免费' : `$${(item.price ?? 0).toFixed(2)}`}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   创建 {formatDateTime(item.created_at)} · 更新 {formatDateTime(item.updated_at)}
@@ -213,14 +213,14 @@ export default function AdminSkillsPage() {
 
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    disabled={actioningId === item.id || item.status !== 'PENDING_REVIEW'}
+                    disabled={actioningId === item.id || item.status !== 'SCANNING'}
                     onClick={() => void handleReview(item, 'APPROVE')}
                   >
                     审核通过
                   </Button>
                   <Button
                     variant="destructive"
-                    disabled={actioningId === item.id || item.status !== 'PENDING_REVIEW'}
+                    disabled={actioningId === item.id || item.status !== 'SCANNING'}
                     onClick={() => void handleReview(item, 'REJECT')}
                   >
                     审核拒绝

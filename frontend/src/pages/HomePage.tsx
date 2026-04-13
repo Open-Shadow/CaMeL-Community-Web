@@ -22,18 +22,17 @@ function normalizeRecommendedSkill(skill: RecommendedSkill): SkillSummary {
   return {
     ...skill,
     tags: [],
-    system_prompt: '',
-    user_prompt_template: '',
-    output_format: 'text',
-    example_input: '',
-    example_output: '',
-    status: 'APPROVED',
+    status: 'APPROVED' as const,
     is_featured: false,
     current_version: 1,
     rejection_reason: '',
+    readme_html: '',
+    package_size: 0,
+    download_count: 0,
     creator_id: 0,
     created_at: '',
     updated_at: '',
+    has_purchased: false,
   }
 }
 

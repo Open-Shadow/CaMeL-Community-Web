@@ -19,7 +19,7 @@ import {
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: '草稿',
-  PENDING_REVIEW: '待审核',
+  SCANNING: '扫描中',
   APPROVED: '已上架',
   REJECTED: '已拒绝',
   ARCHIVED: '已归档',

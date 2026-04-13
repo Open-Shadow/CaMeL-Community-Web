@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Download, Flag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,10 +12,13 @@ import {
   addSkillReview,
   archiveSkill,
   deleteSkill,
+  downloadSkill,
   getSkill,
   getSkillUsagePreference,
   listSkillReviews,
   listSkillVersions,
+  purchaseSkill,
+  reportSkill,
   restoreSkill,
   type SkillReview,
   type SkillSummary,
@@ -24,6 +28,21 @@ import {
 } from '@/lib/skills'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
+
+const STATUS_BADGE: Record<string, 'default' | 'outline' | 'secondary' | 'destructive'> = {
+  APPROVED: 'default',
+  SCANNING: 'secondary',
+  REJECTED: 'destructive',
+  ARCHIVED: 'outline',
+  DRAFT: 'outline',
+}
+
+const REPORT_REASONS = [
+  { value: 'MALICIOUS_CODE', label: '包含恶意代码' },
+  { value: 'FALSE_DESCRIPTION', label: '描述不符' },
+  { value: 'COPYRIGHT', label: '版权侵权' },
+  { value: 'OTHER', label: '其他' },
+]
 
 export default function SkillDetailPage() {
   const { id } = useParams()
@@ -36,11 +55,14 @@ export default function SkillDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const [showSkillFile, setShowSkillFile] = useState(false)
   const [reviewRating, setReviewRating] = useState('5')
   const [reviewComment, setReviewComment] = useState('')
   const [reviewTags, setReviewTags] = useState('')
   const [managing, setManaging] = useState(false)
+  const [purchasing, setPurchasing] = useState(false)
+  const [showReportForm, setShowReportForm] = useState(false)
+  const [reportReason, setReportReason] = useState('MALICIOUS_CODE')
+  const [reportDetail, setReportDetail] = useState('')
 
   useEffect(() => {
     let active = true
@@ -107,6 +129,39 @@ export default function SkillDetailPage() {
   }
 
   const isOwner = Boolean(isAuthenticated && user && user.id === skill.creator_id)
+  const canDownload = skill.pricing_model === 'FREE' || skill.has_purchased || isOwner
+
+  const handlePurchase = async () => {
+    setPurchasing(true)
+    setMessage('')
+    try {
+      await purchaseSkill(skill.id)
+      setSkill({ ...skill, has_purchased: true })
+      setMessage('购买成功！')
+    } catch (err: any) {
+      setMessage(err?.response?.data?.detail || err?.response?.data?.message || '购买失败')
+    } finally {
+      setPurchasing(false)
+    }
+  }
+
+  const handleReport = async () => {
+    setMessage('')
+    try {
+      await reportSkill(skill.id, { reason: reportReason, detail: reportDetail })
+      setMessage('举报已提交')
+      setShowReportForm(false)
+      setReportDetail('')
+    } catch (err: any) {
+      setMessage(err?.response?.data?.detail || err?.response?.data?.message || '举报失败')
+    }
+  }
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
 
   return (
     <div className="mx-auto max-w-7xl py-8 px-4">
@@ -117,22 +172,47 @@ export default function SkillDetailPage() {
           <section className="rounded-[28px] border bg-white p-6 shadow-sm">
             <div className="mb-2 flex flex-wrap gap-2">
               {skill.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}
-              <Badge variant={skill.status === 'APPROVED' ? 'default' : 'outline'}>
+              <Badge variant={STATUS_BADGE[skill.status] || 'outline'}>
                 {skill.status}
               </Badge>
+              {skill.is_featured && <Badge>精选</Badge>}
             </div>
             <h1 className="mb-2 text-3xl font-bold tracking-tight">{skill.name}</h1>
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <span>by {skill.creator_name}</span>
               <span>⭐ {skill.avg_rating.toFixed(1)} ({skill.review_count} 条评价)</span>
               <span>{skill.total_calls} 次调用</span>
+              <span>{skill.download_count} 次下载</span>
               <span>v{skill.current_version}</span>
+              <span>{formatSize(skill.package_size)}</span>
               <span>更新于 {formatDate(skill.updated_at)}</span>
               <span className="text-base font-semibold text-amber-500">
                 {skill.pricing_model === 'FREE'
                   ? '免费'
-                  : `${formatCurrency(skill.price_per_use)}/次`}
+                  : `${formatCurrency(skill.price)}`}
               </span>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              {!isOwner && skill.pricing_model === 'PAID' && !skill.has_purchased && (
+                <Button onClick={handlePurchase} disabled={purchasing}>
+                  {purchasing ? '购买中...' : `购买 ${formatCurrency(skill.price)}`}
+                </Button>
+              )}
+              {canDownload && (
+                <Button variant="outline" onClick={() => downloadSkill(skill.id)}>
+                  <Download className="mr-2 h-4 w-4" /> 下载包
+                </Button>
+              )}
+              {isAuthenticated && !isOwner && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowReportForm((v) => !v)}
+                >
+                  <Flag className="mr-1 h-4 w-4" /> 举报
+                </Button>
+              )}
             </div>
           </section>
 
@@ -147,6 +227,33 @@ export default function SkillDetailPage() {
               {message}
             </div>
           ) : null}
+
+          {showReportForm && (
+            <Card>
+              <CardContent className="space-y-3 p-4">
+                <h3 className="font-semibold">举报此 Skill</h3>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                >
+                  {REPORT_REASONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+                <Textarea
+                  value={reportDetail}
+                  onChange={(e) => setReportDetail(e.target.value)}
+                  placeholder="补充说明（可选）"
+                  rows={2}
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleReport}>提交举报</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowReportForm(false)}>取消</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {isOwner ? (
             <Card>
@@ -217,27 +324,19 @@ export default function SkillDetailPage() {
           <Card>
             <CardContent className="space-y-4 p-4">
               <div>
-                <h2 className="mb-2 font-semibold">skill简介</h2>
+                <h2 className="mb-2 font-semibold">简介</h2>
                 <div className="rounded bg-muted p-3 text-sm whitespace-pre-wrap">{skill.description}</div>
               </div>
 
-              <div className="border-t pt-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h2 className="font-semibold">skill文件</h2>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowSkillFile((value) => !value)}
-                  >
-                    {showSkillFile ? '隐藏' : '显示'}
-                  </Button>
+              {skill.readme_html ? (
+                <div className="border-t pt-4">
+                  <h2 className="mb-3 font-semibold">README</h2>
+                  <div
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: skill.readme_html }}
+                  />
                 </div>
-                {showSkillFile ? (
-                  <pre className="rounded bg-muted p-3 text-sm whitespace-pre-wrap">{skill.system_prompt}</pre>
-                ) : (
-                  <p className="text-sm text-muted-foreground">当前已隐藏 skill文件内容</p>
-                )}
-              </div>
+              ) : null}
             </CardContent>
           </Card>
         </div>
@@ -260,9 +359,9 @@ export default function SkillDetailPage() {
                   <div key={version.id} className="rounded-lg border p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium">v{version.version}</span>
-                      {version.is_major ? <Badge>重大更新</Badge> : <Badge variant="outline">常规更新</Badge>}
+                      <Badge variant={STATUS_BADGE[version.status] || 'outline'}>{version.status}</Badge>
                     </div>
-                    <p className="mt-2 text-muted-foreground">{version.change_note || 'Prompt 更新'}</p>
+                    <p className="mt-2 text-muted-foreground">{version.changelog || '版本更新'}</p>
                     <div className="mt-2 text-xs text-muted-foreground">{formatDate(version.created_at)}</div>
                     {isAuthenticated ? (
                       <div className="mt-3 flex flex-wrap gap-2">
