@@ -387,8 +387,6 @@ class SkillService:
            re-promote it if it's newer than current_version.
         """
         if skill.status == SkillStatus.ARCHIVED:
-            # Find the version to reinstate: prefer already-approved, else restore
-            # the most recently archived one (the quarantine victim).
             live_version = skill.versions.filter(
                 status=VersionStatus.APPROVED
             ).order_by("-created_at").first()
@@ -399,11 +397,11 @@ class SkillService:
                 if live_version:
                     live_version.status = VersionStatus.APPROVED
                     live_version.save(update_fields=["status"])
-            if live_version:
-                skill.current_version = live_version.version
-                skill.package_file = live_version.package_file
             skill.status = SkillStatus.APPROVED
-            skill.save(update_fields=["status", "current_version", "package_file", "updated_at"])
+            if live_version:
+                SkillService._promote_version(skill, live_version)
+            skill.save(update_fields=["status", "current_version", "package_file",
+                                      "package_sha256", "package_size", "readme_html", "updated_at"])
             SearchService.sync_skill(skill)
             cache.delete(SkillService.TRENDING_CACHE_KEY)
             return skill
@@ -415,13 +413,12 @@ class SkillService:
         if quarantined:
             quarantined.status = VersionStatus.APPROVED
             quarantined.save(update_fields=["status"])
-            # Re-promote if it's newer than current live version
             from packaging.version import Version as PkgVersion
             try:
                 if not skill.current_version or PkgVersion(quarantined.version) > PkgVersion(skill.current_version):
-                    skill.current_version = quarantined.version
-                    skill.package_file = quarantined.package_file
-                    skill.save(update_fields=["current_version", "package_file", "updated_at"])
+                    SkillService._promote_version(skill, quarantined)
+                    skill.save(update_fields=["current_version", "package_file",
+                                              "package_sha256", "package_size", "readme_html", "updated_at"])
             except Exception:
                 pass
         return skill

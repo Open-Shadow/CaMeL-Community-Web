@@ -123,16 +123,25 @@ class SkillReportAdmin(admin.ModelAdmin):
     @admin.action(description="驳回举报（解除隔离）")
     def dismiss_reports_selected(self, request, queryset):
         from apps.skills.services import SkillService
-        from apps.skills.models import VersionStatus
+        from apps.skills.models import VersionStatus, SkillReport
+        from common.constants import REPORT_QUARANTINE_THRESHOLD
+
+        dismissed_ids = set(queryset.values_list("id", flat=True))
         seen = set()
+        reinstated = 0
         for report in queryset.select_related("skill"):
             skill = report.skill
-            if skill.id not in seen:
+            if skill.id in seen:
+                continue
+            seen.add(skill.id)
+            # Count reports that will remain after this dismissal
+            remaining = SkillReport.objects.filter(skill=skill).exclude(id__in=dismissed_ids).count()
+            if remaining < REPORT_QUARANTINE_THRESHOLD:
                 if skill.status == "ARCHIVED" or skill.versions.filter(status=VersionStatus.ARCHIVED).exists():
                     SkillService.reinstate_quarantined(skill)
-                seen.add(skill.id)
+                    reinstated += 1
         deleted, _ = queryset.delete()
-        self.message_user(request, f"已驳回 {deleted} 条举报并解除隔离")
+        self.message_user(request, f"已驳回 {deleted} 条举报，解除隔离 {reinstated} 个 Skill")
 
 
 @admin.register(SkillVersion)

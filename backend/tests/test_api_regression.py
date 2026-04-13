@@ -1133,8 +1133,12 @@ class TestReinstateQuarantined:
         return users
 
     @pytest.mark.django_db
-    def test_three_reports_quarantine_single_version_skill_and_dismiss_restores(self, creator):
+    def test_three_reports_quarantine_single_version_skill_and_dismiss_restores(self, creator, tmp_path, settings):
         """3 reports archive a single-version skill; dismissing reports restores it and resolve_package_file succeeds."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        p = tmp_path / "skills" / "single-ver-skill" / "1.0.0.zip"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(_make_zip_bytes({"SKILL.md": "---\nname: T\nversion: 1.0.0\n---\n"}))
         skill = Skill.objects.create(
             creator=creator, name="Single Ver Skill", slug="single-ver-skill",
             description="desc", category="utility", status=SkillStatus.APPROVED,
@@ -1151,14 +1155,12 @@ class TestReinstateQuarantined:
         skill.refresh_from_db()
         assert skill.status == SkillStatus.ARCHIVED
 
-        # Dismiss: reinstate + delete reports
         reports_qs = SkillReport.objects.filter(skill=skill)
         SkillService.reinstate_quarantined(skill)
         reports_qs.delete()
 
         skill.refresh_from_db()
         assert skill.status == SkillStatus.APPROVED
-        # resolve_package_file must succeed
         pkg = SkillService.resolve_package_file(skill)
         assert pkg is not None
 
@@ -1196,6 +1198,9 @@ class TestReinstateQuarantined:
         SkillService.reinstate_quarantined(skill)
         v2.refresh_from_db()
         assert v2.status == VersionStatus.APPROVED
+        # Skill metadata must point at the reinstated version, not the fallback
+        skill.refresh_from_db()
+        assert skill.current_version == "2.0.0"
 
     @pytest.mark.django_db
     def test_dismiss_deletes_report_rows(self, creator):
@@ -1217,3 +1222,37 @@ class TestReinstateQuarantined:
 
         SkillReport.objects.filter(skill=skill).delete()
         assert SkillReport.objects.filter(skill=skill).count() == 0
+
+    @pytest.mark.django_db
+    def test_partial_dismiss_below_threshold_keeps_skill_quarantined(self, creator):
+        """Dismissing only 1 of 4 reports leaves 3 remaining — skill must stay quarantined."""
+        from common.constants import REPORT_QUARANTINE_THRESHOLD
+        skill = Skill.objects.create(
+            creator=creator, name="Partial Dismiss Skill", slug="partial-dismiss-skill",
+            description="desc", category="utility", status=SkillStatus.APPROVED,
+            current_version="1.0.0",
+            package_file="skills/partial-dismiss-skill/1.0.0.zip",
+        )
+        SkillVersion.objects.create(
+            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
+            package_file="skills/partial-dismiss-skill/1.0.0.zip",
+        )
+        # Need 4 reporters so that after dismissing 1, 3 remain (still at threshold)
+        reporters = self._make_reporters(REPORT_QUARANTINE_THRESHOLD + 1)
+        for r in reporters:
+            SkillReportService.report(skill, r, ReportReason.MALICIOUS_CODE)
+        skill.refresh_from_db()
+        assert skill.status == SkillStatus.ARCHIVED
+
+        # Dismiss only the first report
+        first_report = SkillReport.objects.filter(skill=skill).first()
+        dismissed_ids = {first_report.id}
+        remaining = SkillReport.objects.filter(skill=skill).exclude(id__in=dismissed_ids).count()
+        # remaining == 3 == threshold, so should NOT reinstate
+        assert remaining >= REPORT_QUARANTINE_THRESHOLD
+        if remaining < REPORT_QUARANTINE_THRESHOLD:
+            SkillService.reinstate_quarantined(skill)
+        first_report.delete()
+
+        skill.refresh_from_db()
+        assert skill.status == SkillStatus.ARCHIVED
