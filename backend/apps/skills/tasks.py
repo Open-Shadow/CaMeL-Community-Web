@@ -15,12 +15,16 @@ def refresh_skill_recommendation_cache():
 
 
 @shared_task
-def run_skill_scan(skill_id: int):
+def run_skill_scan(skill_id: int, version_id: int | None = None):
     """Run automated security scan on a submitted skill package.
 
     Supports two modes:
     1. New skill: skill.status == SCANNING
     2. Version update: skill.status == APPROVED with a pending SCANNING version
+
+    Args:
+        skill_id: The skill to scan
+        version_id: Optional specific version to scan (prevents race conditions)
     """
     from apps.skills.models import Skill, SkillStatus, VersionStatus
     from apps.skills.package_service import PackageService
@@ -36,11 +40,20 @@ def run_skill_scan(skill_id: int):
     pending_version = None
 
     if is_version_update:
-        pending_version = skill.versions.filter(
-            status=VersionStatus.SCANNING,
-        ).order_by("-created_at").first()
-        if not pending_version:
-            return {"skipped": True, "reason": "No pending version to scan"}
+        if version_id:
+            # Use the specific version that was submitted
+            pending_version = skill.versions.filter(id=version_id).first()
+            if not pending_version:
+                return {"skipped": True, "reason": f"Version {version_id} not found"}
+            if pending_version.status != VersionStatus.SCANNING:
+                return {"skipped": True, "reason": f"Version {version_id} is no longer SCANNING"}
+        else:
+            # Fallback to re-selecting (legacy behavior)
+            pending_version = skill.versions.filter(
+                status=VersionStatus.SCANNING,
+            ).order_by("-created_at").first()
+            if not pending_version:
+                return {"skipped": True, "reason": "No pending version to scan"}
         scan_file = pending_version.package_file
     elif skill.status == SkillStatus.SCANNING:
         scan_file = skill.package_file
@@ -48,14 +61,14 @@ def run_skill_scan(skill_id: int):
         return {"skipped": True, "reason": f"Skill status is {skill.status}"}
 
     if not scan_file:
-        SkillService.complete_scan(skill, passed=False, issues=["文件包缺失"])
+        SkillService.complete_scan(skill, passed=False, issues=["文件包缺失"], version_id=version_id)
         return {"passed": False}
 
     # Extract file contents for scanning
     try:
         file_contents = PackageService.extract_file_contents(scan_file)
     except Exception as e:
-        SkillService.complete_scan(skill, passed=False, issues=[f"文件包解析失败：{e}"])
+        SkillService.complete_scan(skill, passed=False, issues=[f"文件包解析失败：{e}"], version_id=version_id)
         return {"passed": False}
 
     # Run content scan

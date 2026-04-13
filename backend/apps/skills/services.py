@@ -474,7 +474,7 @@ class SkillService:
                 reference_id=str(skill.id),
             )
             from apps.skills.tasks import run_skill_scan
-            run_skill_scan.delay(skill.id)
+            run_skill_scan.delay(skill.id, pending.id)
             return skill
 
         if skill.status not in (SkillStatus.DRAFT, SkillStatus.REJECTED):

@@ -299,12 +299,18 @@ export async function purchaseSkill(skillId: number) {
 }
 
 export async function downloadSkill(skillId: number, version?: string) {
-  // Backend returns a JSON body with the pre-signed download URL.
+  // Open window synchronously (before await) to avoid popup-blocker on Safari/iOS.
+  const win = window.open('', '_blank')
   const params: Record<string, string> = {}
   if (version) params.version = version
-  const response = await api.get<{ url: string }>(`/skills/${skillId}/download`, { params })
-  if (response.data.url) {
-    window.open(response.data.url, '_blank')
+  try {
+    const response = await api.get<{ url: string }>(`/skills/${skillId}/download`, { params })
+    if (win && response.data.url) {
+      win.location.href = response.data.url
+    }
+  } catch (e) {
+    if (win) win.close()
+    throw e
   }
 }
 
