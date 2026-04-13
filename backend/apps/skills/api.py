@@ -9,7 +9,7 @@ from ninja.responses import Status
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
-from common.permissions import AuthBearer, OptionalAuthBearer
+from common.permissions import AuthBearer, OptionalAuthBearer, get_optional_user
 from apps.skills.models import Skill, SkillStatus, SkillPurchase, VersionStatus
 from apps.skills.schemas import (
     SkillOut,
@@ -202,7 +202,7 @@ def list_purchased_skills(request):
 @router.get("/{skill_id}", response=SkillOut, auth=OptionalAuthBearer())
 def get_skill(request, skill_id: int):
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
-    return _skill_out(skill, request.auth)
+    return _skill_out(skill, get_optional_user(request))
 
 
 @router.patch("/{skill_id}", response=SkillOut, auth=AuthBearer())

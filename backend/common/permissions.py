@@ -4,6 +4,11 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+# Sentinel: Django Ninja rejects any falsey return from auth callbacks as 401.
+# OptionalAuthBearer returns this truthy sentinel when no token is present,
+# then the view receives request.auth = _ANONYMOUS and treats it as None.
+_ANONYMOUS = object()
+
 
 class AuthBearer(HttpBearer):
     def authenticate(self, request, token):
@@ -22,7 +27,8 @@ class AuthBearer(HttpBearer):
 class OptionalAuthBearer(HttpBearer):
     """Like AuthBearer but doesn't reject unauthenticated requests.
 
-    Sets request.auth to the user if a valid token is present, or None otherwise.
+    Sets request.auth to the user if a valid token is present, or _ANONYMOUS otherwise.
+    Views should use `get_optional_user(request)` to resolve to User | None.
     """
 
     def authenticate(self, request, token):
@@ -32,21 +38,28 @@ class OptionalAuthBearer(HttpBearer):
             data = AccessToken(token)
             user = User.objects.get(id=data['user_id'])
             if not user.is_active:
-                return None
+                return _ANONYMOUS
             return user
         except (TokenError, User.DoesNotExist):
-            return None
+            return _ANONYMOUS
 
     def __call__(self, request):
-        # Override to not raise 401 when no Authorization header present
         headers = request.headers
         auth_value = headers.get("Authorization", "")
         if not auth_value:
-            return None
+            return _ANONYMOUS
         parts = auth_value.split(" ")
         if len(parts) != 2 or parts[0].lower() != "bearer":
-            return None
+            return _ANONYMOUS
         return self.authenticate(request, parts[1])
+
+
+def get_optional_user(request):
+    """Resolve request.auth from OptionalAuthBearer to User | None."""
+    auth = getattr(request, "auth", None)
+    if auth is _ANONYMOUS or auth is None:
+        return None
+    return auth
 
 
 def public_api(func):

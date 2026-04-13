@@ -126,21 +126,18 @@ class SkillReportAdmin(admin.ModelAdmin):
         from apps.skills.models import VersionStatus, SkillReport
         from common.constants import REPORT_QUARANTINE_THRESHOLD
 
-        dismissed_ids = set(queryset.values_list("id", flat=True))
-        seen = set()
+        # Collect affected skill IDs before deleting
+        affected_skills = set(queryset.values_list("skill_id", flat=True))
+        # Delete first so threshold checks see post-delete state
+        deleted, _ = queryset.delete()
         reinstated = 0
-        for report in queryset.select_related("skill"):
-            skill = report.skill
-            if skill.id in seen:
-                continue
-            seen.add(skill.id)
-            # Count reports that will remain after this dismissal
-            remaining = SkillReport.objects.filter(skill=skill).exclude(id__in=dismissed_ids).count()
+        for skill_id in affected_skills:
+            skill = Skill.objects.get(id=skill_id)
+            remaining = SkillReport.objects.filter(skill=skill).count()
             if remaining < REPORT_QUARANTINE_THRESHOLD:
                 if skill.status == "ARCHIVED" or skill.versions.filter(status=VersionStatus.ARCHIVED).exists():
                     SkillService.reinstate_quarantined(skill)
                     reinstated += 1
-        deleted, _ = queryset.delete()
         self.message_user(request, f"已驳回 {deleted} 条举报，解除隔离 {reinstated} 个 Skill")
 
 

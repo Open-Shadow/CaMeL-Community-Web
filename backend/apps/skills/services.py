@@ -309,11 +309,13 @@ class SkillService:
                     f"版本 {new_version} 已存在，请使用更高的版本号"
                 )
 
-            # Supersede any existing SCANNING versions for approved skills
+            # Supersede any existing pending versions for approved skills
             # to enforce a single pending version lifecycle.
             if skill.status == SkillStatus.APPROVED:
                 skill.versions.filter(
-                    status=VersionStatus.SCANNING,
+                    status__in=(VersionStatus.SCANNING, VersionStatus.REJECTED),
+                ).exclude(
+                    status=VersionStatus.APPROVED,
                 ).update(status=VersionStatus.REJECTED)
 
             new_sv = SkillVersion.objects.create(
@@ -322,7 +324,11 @@ class SkillService:
                 package_file=data["package_file"],
                 package_sha256=data["package_sha256"],
                 changelog=data.get("changelog", "更新版本"),
-                status=VersionStatus.SCANNING,
+                # For approved skills, new versions start as REJECTED (not yet
+                # submitted) so moderators can't approve them before the creator
+                # explicitly calls /submit. For non-approved skills, use SCANNING
+                # since they go through the normal submission flow.
+                status=VersionStatus.REJECTED if skill.status == SkillStatus.APPROVED else VersionStatus.SCANNING,
             )
 
             if skill.status != SkillStatus.APPROVED:
@@ -441,12 +447,15 @@ class SkillService:
         without changing the skill's live status.
         """
         if skill.status == SkillStatus.APPROVED:
-            # Submit a pending version for review without affecting the live skill
+            # Submit a pending version for review without affecting the live skill.
+            # New uploads are created as REJECTED; transition to SCANNING here.
             pending = skill.versions.filter(
-                status=VersionStatus.SCANNING,
+                status__in=(VersionStatus.REJECTED, VersionStatus.SCANNING),
             ).order_by("-created_at").first()
             if not pending:
                 raise ValueError("没有待审核的新版本")
+            pending.status = VersionStatus.SCANNING
+            pending.save(update_fields=["status"])
 
             NotificationService.send(
                 recipient=skill.creator,
@@ -623,7 +632,10 @@ class SkillService:
             return
         skill.package_file = version_obj.package_file
         skill.package_sha256 = version_obj.package_sha256
-        skill.package_size = version_obj.package_file.size if version_obj.package_file else 0
+        try:
+            skill.package_size = version_obj.package_file.size if version_obj.package_file else 0
+        except OSError:
+            skill.package_size = 0
         skill.current_version = version_obj.version
         # Re-render readme from the new package if possible
         try:

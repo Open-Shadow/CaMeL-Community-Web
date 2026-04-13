@@ -397,9 +397,9 @@ class TestSinglePendingVersionLifecycle:
         # Old SCANNING version should be rejected
         old = approved_skill.versions.get(version="2.0.0")
         assert old.status == VersionStatus.REJECTED
-        # New version should be SCANNING
+        # New version should be REJECTED (pre-submission) for approved skills
         new = approved_skill.versions.get(version="3.0.0")
-        assert new.status == VersionStatus.SCANNING
+        assert new.status == VersionStatus.REJECTED
 
     @pytest.mark.django_db
     def test_approve_stale_version_blocked(self, approved_skill):
@@ -554,13 +554,13 @@ class TestHTTPSkillUpdate:
         )
         assert resp.status_code == 200, resp.content
         body = resp.json()
-        # Approved skill stays approved — version goes to SCANNING
+        # Approved skill stays approved — version is pre-submission (REJECTED)
         assert body["status"] == SkillStatus.APPROVED
         # current_version stays at 1.0.0 until pending version is approved
         assert body["current_version"] == "1.0.0"
-        # New version should exist as SCANNING
+        # New version should exist as REJECTED (not yet submitted for scan)
         assert approved_skill.versions.filter(
-            version="2.0.0", status=VersionStatus.SCANNING,
+            version="2.0.0", status=VersionStatus.REJECTED,
         ).exists()
 
     @pytest.mark.django_db
@@ -1237,22 +1237,20 @@ class TestReinstateQuarantined:
             skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
             package_file="skills/partial-dismiss-skill/1.0.0.zip",
         )
-        # Need 4 reporters so that after dismissing 1, 3 remain (still at threshold)
         reporters = self._make_reporters(REPORT_QUARANTINE_THRESHOLD + 1)
         for r in reporters:
             SkillReportService.report(skill, r, ReportReason.MALICIOUS_CODE)
         skill.refresh_from_db()
         assert skill.status == SkillStatus.ARCHIVED
 
-        # Dismiss only the first report
+        # Mirror admin action: delete first, then check threshold, then reinstate
         first_report = SkillReport.objects.filter(skill=skill).first()
-        dismissed_ids = {first_report.id}
-        remaining = SkillReport.objects.filter(skill=skill).exclude(id__in=dismissed_ids).count()
-        # remaining == 3 == threshold, so should NOT reinstate
+        first_report.delete()
+        remaining = SkillReport.objects.filter(skill=skill).count()
         assert remaining >= REPORT_QUARANTINE_THRESHOLD
+        # Should NOT reinstate because remaining >= threshold
         if remaining < REPORT_QUARANTINE_THRESHOLD:
             SkillService.reinstate_quarantined(skill)
-        first_report.delete()
 
         skill.refresh_from_db()
         assert skill.status == SkillStatus.ARCHIVED
