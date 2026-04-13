@@ -17,7 +17,7 @@ from apps.skills.schemas import (
     SkillUsagePreferenceInput, SkillUsagePreferenceOut,
     SkillPurchaseInput, SkillPurchaseOut, SkillPurchaseDetailOut,
     SkillReportInput, SkillReportOut,
-    MessageOut,
+    MessageOut, PackageFileEntry,
 )
 from apps.skills.services import SkillService, SkillPurchaseService, SkillReportService
 
@@ -258,15 +258,19 @@ def download_skill(request, skill_id: int, version: Optional[str] = None):
     if not skill.package_file:
         raise HttpError(404, "Skill 文件包不存在")
 
-    # Check version-scoped security archive
+    # Resolve to a specific APPROVED version
     from apps.skills.models import VersionStatus
-    target_version_str = version or skill.current_version
-    version_obj = skill.versions.filter(version=target_version_str).first()
+    if version:
+        version_obj = skill.versions.filter(version=version, status=VersionStatus.APPROVED).first()
+        if not version_obj:
+            raise HttpError(404, "指定版本不存在或未通过审核")
+    else:
+        version_obj = skill.versions.filter(status=VersionStatus.APPROVED).order_by("-created_at").first()
+
     if version_obj and version_obj.status == VersionStatus.ARCHIVED:
         raise HttpError(403, "该版本已因安全原因被封禁，无法下载")
 
     from apps.skills.package_service import PackageService
-    # Use version-scoped file if available
     file_to_download = version_obj.package_file if version_obj else skill.package_file
     if not file_to_download:
         raise HttpError(404, "指定版本文件包不存在")
@@ -347,6 +351,39 @@ def list_versions(request, skill_id: int):
         }
         for version in versions
     ]
+
+
+@router.get("/{skill_id}/file-tree", response=List[PackageFileEntry], auth=AuthBearer())
+def get_file_tree(request, skill_id: int):
+    """Return the file listing from a skill's package ZIP.
+
+    Only available to purchasers, owners, or users of free skills.
+    """
+    skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
+
+    if not SkillPurchaseService.has_access(skill, request.auth):
+        raise HttpError(403, "请先购买该 Skill 后查看文件列表")
+
+    if not skill.package_file:
+        raise HttpError(404, "Skill 文件包不存在")
+
+    import zipfile
+    from io import BytesIO
+
+    try:
+        content = skill.package_file.read()
+        skill.package_file.seek(0)
+        entries = []
+        with zipfile.ZipFile(BytesIO(content)) as zf:
+            for info in zf.infolist():
+                entries.append({
+                    "path": info.filename,
+                    "size": info.file_size,
+                    "is_dir": info.is_dir(),
+                })
+        return entries
+    except zipfile.BadZipFile:
+        raise HttpError(400, "文件包格式损坏")
 
 
 @router.get("/{skill_id}/usage-preference", response=SkillUsagePreferenceOut, auth=AuthBearer())

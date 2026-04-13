@@ -170,3 +170,9 @@ class SkillReportOut(Schema):
 
 class MessageOut(Schema):
     message: str
+
+
+class PackageFileEntry(Schema):
+    path: str
+    size: int
+    is_dir: bool

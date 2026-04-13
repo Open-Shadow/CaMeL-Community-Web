@@ -262,7 +262,12 @@ class SkillService:
     @classmethod
     @transaction.atomic
     def update(cls, skill: Skill, data: dict) -> Skill:
-        """Update skill metadata and optionally upload a new version."""
+        """Update skill metadata and optionally upload a new version.
+
+        For approved skills with a new package, the upload goes to a pending
+        SkillVersion without changing the live Skill pointers. The creator must
+        submit the new version for scan/review before it goes live.
+        """
         payload = cls._validate_metadata(data, existing=skill)
         has_new_package = "package_file" in data and data["package_file"]
 
@@ -278,12 +283,25 @@ class SkillService:
             new_version = data.get("version")
             if not new_version:
                 raise ValueError("新版本文件包必须包含版本号")
-            skill.package_file = data["package_file"]
-            skill.package_sha256 = data["package_sha256"]
-            skill.package_size = data["package_size"]
-            skill.readme_html = data.get("readme_html", skill.readme_html)
-            skill.current_version = new_version
-            SkillVersion.objects.create(
+
+            # Enforce monotonic version progression
+            from apps.skills.package_service import PackageService
+            new_tuple = PackageService.parse_semver_tuple(new_version)
+            existing_versions = list(
+                skill.versions.values_list("version", flat=True)
+            )
+            for ev in existing_versions:
+                try:
+                    if PackageService.parse_semver_tuple(ev) >= new_tuple:
+                        raise ValueError(
+                            f"新版本 {new_version} 必须大于已有版本 {ev}"
+                        )
+                except ValueError as e:
+                    if "必须大于" in str(e):
+                        raise
+                    # Skip unparseable old versions
+
+            new_sv = SkillVersion.objects.create(
                 skill=skill,
                 version=new_version,
                 package_file=data["package_file"],
@@ -291,6 +309,19 @@ class SkillService:
                 changelog=data.get("changelog", "更新版本"),
                 status=VersionStatus.SCANNING,
             )
+
+            if skill.status != SkillStatus.APPROVED:
+                # For non-approved skills, update the live pointers immediately
+                # (they aren't public yet anyway).
+                skill.package_file = data["package_file"]
+                skill.package_sha256 = data["package_sha256"]
+                skill.package_size = data["package_size"]
+                skill.readme_html = data.get("readme_html", skill.readme_html)
+                skill.current_version = new_version
+            # For approved skills, live pointers stay unchanged until the new
+            # version passes scan/admin review (see promote_version).
+
+            # Trim old versions beyond the 10 most recent
             version_ids = list(
                 skill.versions.order_by("-created_at").values_list("id", flat=True)[10:]
             )
@@ -339,7 +370,31 @@ class SkillService:
     @classmethod
     @transaction.atomic
     def submit_for_review(cls, skill: Skill) -> Skill:
-        """Submit skill for automated scanning."""
+        """Submit skill for automated scanning.
+
+        For DRAFT/REJECTED skills: transitions the whole skill to SCANNING.
+        For APPROVED skills: submits the latest pending version for scan
+        without changing the skill's live status.
+        """
+        if skill.status == SkillStatus.APPROVED:
+            # Submit a pending version for review without affecting the live skill
+            pending = skill.versions.filter(
+                status=VersionStatus.SCANNING,
+            ).order_by("-created_at").first()
+            if not pending:
+                raise ValueError("没有待审核的新版本")
+
+            NotificationService.send(
+                recipient=skill.creator,
+                notification_type="skill_submitted",
+                title="新版本已提交扫描",
+                content=f"「{skill.name}」v{pending.version} 正在进行自动安全扫描。",
+                reference_id=str(skill.id),
+            )
+            from apps.skills.tasks import run_skill_scan
+            run_skill_scan.delay(skill.id)
+            return skill
+
         if skill.status not in (SkillStatus.DRAFT, SkillStatus.REJECTED):
             raise ValueError("只有草稿或被拒绝的技能可以提交审核")
 
@@ -372,52 +427,86 @@ class SkillService:
 
     @classmethod
     @transaction.atomic
-    def complete_scan(cls, skill: Skill, *, passed: bool, issues: list[str]) -> Skill:
+    def complete_scan(cls, skill: Skill, *, passed: bool, issues: list[str], warnings: list[str] | None = None) -> Skill:
         """Called after async scan completes."""
         latest_version = skill.versions.order_by("-created_at").first()
+        is_version_update = skill.status == SkillStatus.APPROVED
 
         if not passed:
-            skill.status = SkillStatus.REJECTED
-            skill.rejection_reason = "；".join(issues)
-            skill.save(update_fields=["status", "rejection_reason"])
-            if latest_version:
-                latest_version.status = VersionStatus.REJECTED
-                latest_version.save(update_fields=["status"])
-            NotificationService.send(
-                recipient=skill.creator,
-                notification_type="skill_reviewed",
-                title="Skill 扫描未通过",
-                content=f"「{skill.name}」存在风险项：{skill.rejection_reason}",
-                reference_id=str(skill.id),
-            )
+            if is_version_update:
+                # Version-scoped failure: reject the version, keep skill approved
+                if latest_version:
+                    latest_version.status = VersionStatus.REJECTED
+                    latest_version.save(update_fields=["status"])
+                NotificationService.send(
+                    recipient=skill.creator,
+                    notification_type="skill_reviewed",
+                    title="新版本扫描未通过",
+                    content=f"「{skill.name}」v{latest_version.version if latest_version else '?'} 存在风险项：{'；'.join(issues)}",
+                    reference_id=str(skill.id),
+                )
+            else:
+                skill.status = SkillStatus.REJECTED
+                skill.rejection_reason = "；".join(issues)
+                skill.save(update_fields=["status", "rejection_reason"])
+                if latest_version:
+                    latest_version.status = VersionStatus.REJECTED
+                    latest_version.save(update_fields=["status"])
+                NotificationService.send(
+                    recipient=skill.creator,
+                    notification_type="skill_reviewed",
+                    title="Skill 扫描未通过",
+                    content=f"「{skill.name}」存在风险项：{skill.rejection_reason}",
+                    reference_id=str(skill.id),
+                )
             return skill
+
+        # Persist warnings on the version if any
+        if warnings and latest_version:
+            latest_version.changelog = (
+                latest_version.changelog + "\n⚠️ " + "；".join(warnings)
+            ).strip()
 
         # Check trust level for auto-publish
         creator_score = skill.creator.credit_score
         is_trusted = creator_score >= CreditLevelConfig.CRAFTSMAN_MIN
 
         if is_trusted:
-            skill.status = SkillStatus.APPROVED
-            skill.rejection_reason = ""
-            skill.save(update_fields=["status", "rejection_reason", "updated_at"])
             if latest_version:
                 latest_version.status = VersionStatus.APPROVED
-                latest_version.save(update_fields=["status"])
-            SearchService.sync_skill(skill)
-            CreditService.add_credit(skill.creator, CreditAction.PUBLISH_SKILL, str(skill.id))
-            NotificationService.send(
-                recipient=skill.creator,
-                notification_type="skill_reviewed",
-                title="Skill 已自动上架",
-                content=f"「{skill.name}」扫描通过，已自动上架。",
-                reference_id=str(skill.id),
-            )
+                latest_version.save(update_fields=["status", "changelog"])
+            if is_version_update:
+                # Promote the approved version to live pointers
+                cls._promote_version(skill, latest_version)
+                NotificationService.send(
+                    recipient=skill.creator,
+                    notification_type="skill_reviewed",
+                    title="新版本已自动上架",
+                    content=f"「{skill.name}」v{latest_version.version if latest_version else '?'} 扫描通过，已自动上架。",
+                    reference_id=str(skill.id),
+                )
+            else:
+                skill.status = SkillStatus.APPROVED
+                skill.rejection_reason = ""
+                skill.save(update_fields=["status", "rejection_reason", "updated_at"])
+                SearchService.sync_skill(skill)
+                CreditService.add_credit(skill.creator, CreditAction.PUBLISH_SKILL, str(skill.id))
+                NotificationService.send(
+                    recipient=skill.creator,
+                    notification_type="skill_reviewed",
+                    title="Skill 已自动上架",
+                    content=f"「{skill.name}」扫描通过，已自动上架。",
+                    reference_id=str(skill.id),
+                )
         else:
-            # Low-trust users: keep in SCANNING, needs admin approval
+            if latest_version:
+                latest_version.save(update_fields=["changelog"])
+            # Low-trust users: keep pending, needs admin approval
+            msg = "新版本扫描通过，等待人工审核" if is_version_update else "Skill 扫描通过，等待人工审核"
             NotificationService.send(
                 recipient=skill.creator,
                 notification_type="skill_submitted",
-                title="Skill 扫描通过，等待人工审核",
+                title=msg,
                 content=f"「{skill.name}」扫描通过，正在等待管理员审核。",
                 reference_id=str(skill.id),
             )
@@ -425,9 +514,46 @@ class SkillService:
         return skill
 
     @staticmethod
+    def _promote_version(skill: Skill, version_obj) -> None:
+        """Promote an approved version to be the live Skill pointers."""
+        if not version_obj:
+            return
+        skill.package_file = version_obj.package_file
+        skill.package_sha256 = version_obj.package_sha256
+        skill.package_size = version_obj.package_file.size if version_obj.package_file else 0
+        skill.current_version = version_obj.version
+        # Re-render readme from the new package if possible
+        try:
+            from apps.skills.package_service import PackageService
+            result = PackageService.process_upload(version_obj.package_file)
+            skill.readme_html = result.get("readme_html", skill.readme_html)
+        except Exception:
+            pass
+        skill.save()
+
+    @classmethod
     @transaction.atomic
-    def admin_approve(skill: Skill) -> Skill:
-        """Admin approves a skill that passed scanning but needs manual review."""
+    def admin_approve(cls, skill: Skill) -> Skill:
+        """Admin approves a skill or a pending version of an already-approved skill."""
+        if skill.status == SkillStatus.APPROVED:
+            # Version-scoped approval: find the latest pending (SCANNING) version
+            pending = skill.versions.filter(
+                status=VersionStatus.SCANNING,
+            ).order_by("-created_at").first()
+            if not pending:
+                raise ValueError("没有待审核的新版本")
+            pending.status = VersionStatus.APPROVED
+            pending.save(update_fields=["status"])
+            cls._promote_version(skill, pending)
+            NotificationService.send(
+                recipient=skill.creator,
+                notification_type="skill_reviewed",
+                title="新版本审核通过",
+                content=f"「{skill.name}」v{pending.version} 已通过审核并上架。",
+                reference_id=str(skill.id),
+            )
+            return skill
+
         if skill.status != SkillStatus.SCANNING:
             raise ValueError("当前 Skill 不在扫描/待审核状态")
 
@@ -505,18 +631,29 @@ class SkillService:
             if not SkillPurchase.objects.filter(skill=skill, user=caller).exists():
                 raise ValueError("请先购买该 Skill")
 
-        # Determine which version to use
+        # Determine which version to use — always resolve to an APPROVED version
         preference = SkillUsagePreference.objects.filter(skill=skill, user=caller).first()
-        selected_version_str = skill.current_version
-        selected_version_obj = skill.versions.filter(version=selected_version_str).first()
 
+        selected_version_obj = None
         if preference and not preference.auto_follow_latest and preference.locked_version:
-            if skill.versions.filter(version=preference.locked_version).exists():
-                selected_version_str = preference.locked_version
-                selected_version_obj = skill.versions.filter(version=selected_version_str).first()
+            selected_version_obj = skill.versions.filter(
+                version=preference.locked_version,
+                status=VersionStatus.APPROVED,
+            ).first()
 
-        # Check version is not security-archived
-        if selected_version_obj and selected_version_obj.status == VersionStatus.ARCHIVED:
+        if not selected_version_obj:
+            # Default: latest approved version
+            selected_version_obj = skill.versions.filter(
+                status=VersionStatus.APPROVED,
+            ).order_by("-created_at").first()
+
+        if not selected_version_obj:
+            raise ValueError("该技能暂无可用版本")
+
+        selected_version_str = selected_version_obj.version
+
+        # Check version is not security-archived (belt-and-suspenders, filter above excludes it)
+        if selected_version_obj.status == VersionStatus.ARCHIVED:
             raise ValueError("该版本已因安全原因被封禁，无法调用")
 
         start = time.time()

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Upload } from 'lucide-react'
+import { Upload, FileText, ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { TagInput } from '@/components/shared/tag-input'
 import { createSkill, submitSkill } from '@/lib/skills'
 import { useAuth } from '@/hooks/use-auth'
+import { unzipSync, strFromU8 } from 'fflate'
 
 const CATEGORIES = [
   { value: 'CODE_DEV', label: '代码开发' },
@@ -39,6 +40,87 @@ export default function CreateSkillPage() {
   const [dragOver, setDragOver] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [skillMdPreview, setSkillMdPreview] = useState<{ frontmatter: Record<string, unknown>; body: string } | null>(null)
+  const [previewExpanded, setPreviewExpanded] = useState(true)
+
+  /** Parse SKILL.md from a ZIP file and extract frontmatter + body. */
+  const parseSkillMd = useCallback(async (file: File) => {
+    try {
+      const buffer = await file.arrayBuffer()
+      const unzipped = unzipSync(new Uint8Array(buffer))
+
+      // Find SKILL.md — at root or in a single top-level directory
+      let skillMdContent: string | null = null
+      const paths = Object.keys(unzipped)
+      const directMatch = paths.find(
+        (p) => p === 'SKILL.md' || p.endsWith('/SKILL.md'),
+      )
+      if (directMatch) {
+        skillMdContent = strFromU8(unzipped[directMatch])
+      }
+
+      if (!skillMdContent) {
+        setSkillMdPreview(null)
+        return
+      }
+
+      // Parse YAML frontmatter
+      if (!skillMdContent.startsWith('---')) {
+        setSkillMdPreview({ frontmatter: {}, body: skillMdContent })
+        return
+      }
+
+      const parts = skillMdContent.split('---')
+      if (parts.length < 3) {
+        setSkillMdPreview({ frontmatter: {}, body: skillMdContent })
+        return
+      }
+
+      // Simple YAML parser for frontmatter (key: value pairs)
+      const yamlBlock = parts[1]
+      const frontmatter: Record<string, unknown> = {}
+      for (const line of yamlBlock.split('\n')) {
+        const match = line.match(/^(\w+)\s*:\s*(.+)$/)
+        if (match) {
+          const value = match[2].trim()
+          // Handle arrays like [tag1, tag2]
+          if (value.startsWith('[') && value.endsWith(']')) {
+            frontmatter[match[1]] = value
+              .slice(1, -1)
+              .split(',')
+              .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+              .filter(Boolean)
+          } else {
+            frontmatter[match[1]] = value.replace(/^['"]|['"]$/g, '')
+          }
+        }
+      }
+
+      const body = parts.slice(2).join('---').trim()
+      setSkillMdPreview({ frontmatter, body })
+
+      // Auto-fill form fields from frontmatter
+      setForm((current) => {
+        const updated = { ...current }
+        if (frontmatter.name && typeof frontmatter.name === 'string' && !current.name) {
+          updated.name = frontmatter.name
+        }
+        if (frontmatter.description && typeof frontmatter.description === 'string' && !current.description) {
+          updated.description = frontmatter.description
+        }
+        if (frontmatter.category && typeof frontmatter.category === 'string') {
+          const validCat = CATEGORIES.find((c) => c.value === frontmatter.category)
+          if (validCat) updated.category = validCat.value
+        }
+        if (Array.isArray(frontmatter.tags) && current.tags.length === 0) {
+          updated.tags = frontmatter.tags as string[]
+        }
+        return updated
+      })
+    } catch {
+      setSkillMdPreview(null)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -61,7 +143,8 @@ export default function CreateSkillPage() {
     }
     setPackageFile(file)
     setError('')
-  }, [])
+    parseSkillMd(file)
+  }, [parseSkillMd])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -170,6 +253,52 @@ export default function CreateSkillPage() {
             />
           </div>
         </div>
+
+        {skillMdPreview && (
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between text-sm font-medium"
+              onClick={() => setPreviewExpanded(!previewExpanded)}
+            >
+              <span className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                SKILL.md 预览
+                {skillMdPreview.frontmatter.version != null && (
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs">
+                    v{String(skillMdPreview.frontmatter.version)}
+                  </span>
+                )}
+              </span>
+              {previewExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {previewExpanded && (
+              <div className="mt-3 space-y-3">
+                {Object.keys(skillMdPreview.frontmatter).length > 0 && (
+                  <div className="rounded border bg-background p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Frontmatter</p>
+                    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                      {Object.entries(skillMdPreview.frontmatter).map(([key, value]) => (
+                        <div key={key} className="contents">
+                          <dt className="font-medium text-muted-foreground">{key}:</dt>
+                          <dd>{Array.isArray(value) ? value.join(', ') : String(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
+                {skillMdPreview.body && (
+                  <div className="rounded border bg-background p-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">README</p>
+                    <div className="prose prose-sm max-h-64 overflow-auto whitespace-pre-wrap text-sm">
+                      {skillMdPreview.body}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="text-sm font-medium mb-1 block">分类</label>

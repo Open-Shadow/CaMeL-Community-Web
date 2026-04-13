@@ -324,3 +324,14 @@ export async function reportSkill(skillId: number, payload: { reason: string; de
   const response = await api.post<SkillReportResult>(`/skills/${skillId}/report`, payload)
   return response.data
 }
+
+export interface PackageFileEntry {
+  path: string
+  size: number
+  is_dir: boolean
+}
+
+export async function getSkillFileTree(skillId: number) {
+  const response = await api.get<PackageFileEntry[]>(`/skills/${skillId}/file-tree`)
+  return response.data
+}

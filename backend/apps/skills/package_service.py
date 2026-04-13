@@ -1,6 +1,7 @@
 """Package upload, validation, and download helpers."""
 import hashlib
 import os
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -16,6 +17,12 @@ from common.constants import (
     MAX_PACKAGE_FILE_SIZE,
     MAX_PACKAGE_SIZE,
     PACKAGE_PRESIGNED_URL_EXPIRY,
+)
+
+SEMVER_RE = re.compile(
+    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+    r"(?:-(?P<pre>[0-9A-Za-z\-]+(?:\.[0-9A-Za-z\-]+)*))?"
+    r"(?:\+(?P<build>[0-9A-Za-z\-]+(?:\.[0-9A-Za-z\-]+)*))?$"
 )
 
 
@@ -62,7 +69,7 @@ class PackageService:
             "package_sha256": sha256,
             "package_size": len(content),
             "readme_html": readme_html,
-            "version": frontmatter.get("version", "1.0.0"),
+            "version": cls.validate_semver(frontmatter.get("version", "1.0.0")),
         }
 
         # Pass through frontmatter metadata for auto-fill
@@ -71,6 +78,21 @@ class PackageService:
                 result.setdefault(key, frontmatter[key])
 
         return result
+
+    @staticmethod
+    def validate_semver(version: str) -> str:
+        """Validate that version string is valid SemVer. Returns the version if valid."""
+        if not SEMVER_RE.match(version):
+            raise ValueError(f"版本号 '{version}' 不是有效的 SemVer 格式（如 1.0.0）")
+        return version
+
+    @staticmethod
+    def parse_semver_tuple(version: str) -> tuple[int, int, int]:
+        """Parse a SemVer string into (major, minor, patch) for comparison."""
+        m = SEMVER_RE.match(version)
+        if not m:
+            raise ValueError(f"版本号 '{version}' 不是有效的 SemVer 格式")
+        return int(m.group("major")), int(m.group("minor")), int(m.group("patch"))
 
     @classmethod
     def _validate_zip_safety(cls, zf: zipfile.ZipFile):

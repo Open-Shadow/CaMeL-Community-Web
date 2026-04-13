@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Download, Flag } from 'lucide-react'
+import { Download, Flag, File as FileIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,12 +14,14 @@ import {
   deleteSkill,
   downloadSkill,
   getSkill,
+  getSkillFileTree,
   getSkillUsagePreference,
   listSkillReviews,
   listSkillVersions,
   purchaseSkill,
   reportSkill,
   restoreSkill,
+  type PackageFileEntry,
   type SkillReview,
   type SkillSummary,
   type SkillUsagePreference,
@@ -63,6 +65,8 @@ export default function SkillDetailPage() {
   const [showReportForm, setShowReportForm] = useState(false)
   const [reportReason, setReportReason] = useState('MALICIOUS_CODE')
   const [reportDetail, setReportDetail] = useState('')
+  const [fileTree, setFileTree] = useState<PackageFileEntry[]>([])
+  const [fileTreeLoading, setFileTreeLoading] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -335,6 +339,59 @@ export default function SkillDetailPage() {
                     className="prose prose-sm max-w-none"
                     dangerouslySetInnerHTML={{ __html: skill.readme_html }}
                   />
+                </div>
+              ) : null}
+
+              {canDownload ? (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="font-semibold">文件列表</h2>
+                    {fileTree.length === 0 && !fileTreeLoading && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          setFileTreeLoading(true)
+                          try {
+                            setFileTree(await getSkillFileTree(skill.id))
+                          } catch {
+                            // Silently fail — user can retry
+                          } finally {
+                            setFileTreeLoading(false)
+                          }
+                        }}
+                      >
+                        查看文件
+                      </Button>
+                    )}
+                  </div>
+                  {fileTreeLoading && (
+                    <p className="text-sm text-muted-foreground">加载中...</p>
+                  )}
+                  {fileTree.length > 0 && (
+                    <ul className="space-y-1 text-sm font-mono">
+                      {fileTree
+                        .filter((f) => !f.is_dir)
+                        .map((f) => (
+                          <li key={f.path} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-muted/50">
+                            <FileIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{f.path}</span>
+                            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                              {f.size < 1024
+                                ? `${f.size} B`
+                                : `${(f.size / 1024).toFixed(1)} KB`}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </div>
+              ) : skill.pricing_model === 'PAID' ? (
+                <div className="border-t pt-4">
+                  <h2 className="mb-3 font-semibold">文件列表</h2>
+                  <p className="text-sm text-muted-foreground">
+                    购买后可查看文件列表和下载包内容。
+                  </p>
                 </div>
               ) : null}
             </CardContent>
