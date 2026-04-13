@@ -82,6 +82,7 @@ class PackageService:
     @staticmethod
     def validate_semver(version: str) -> str:
         """Validate that version string is valid SemVer. Returns the version if valid."""
+        version = str(version)
         if not SEMVER_RE.match(version):
             raise ValueError(f"版本号 '{version}' 不是有效的 SemVer 格式（如 1.0.0）")
         return version

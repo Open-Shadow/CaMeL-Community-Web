@@ -85,13 +85,18 @@ def create_skill(
     except (json.JSONDecodeError, TypeError):
         parsed_tags = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
+    try:
+        price_val = float(price) if price else None
+    except (ValueError, TypeError):
+        raise HttpError(400, "价格格式无效")
+
     merged = {
         "name": name,
         "description": description,
         "category": category,
         "tags": parsed_tags,
         "pricing_model": pricing_model,
-        "price": float(price) if price else None,
+        "price": price_val,
         "changelog": changelog,
     }
     # Package data (file, sha256, size, readme_html, version) goes in first;
@@ -235,7 +240,10 @@ def update_skill(
     if pricing_model is not None:
         merged["pricing_model"] = pricing_model
     if price is not None:
-        merged["price"] = float(price)
+        try:
+            merged["price"] = float(price)
+        except (ValueError, TypeError):
+            raise HttpError(400, "价格格式无效")
     if changelog:
         merged["changelog"] = changelog
 

@@ -198,12 +198,12 @@ export default function SkillDetailPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-3">
-              {!isOwner && skill.pricing_model === 'PAID' && !skill.has_purchased && (
+              {isAuthenticated && !isOwner && skill.pricing_model === 'PAID' && !skill.has_purchased && (
                 <Button onClick={handlePurchase} disabled={purchasing}>
                   {purchasing ? '购买中...' : `购买 ${formatCurrency(skill.price)}`}
                 </Button>
               )}
-              {canDownload && (
+              {isAuthenticated && canDownload && (
                 <Button variant="outline" onClick={() => downloadSkill(skill.id)}>
                   <Download className="mr-2 h-4 w-4" /> 下载包
                 </Button>

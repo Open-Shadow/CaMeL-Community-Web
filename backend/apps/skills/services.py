@@ -500,9 +500,12 @@ class SkillService:
 
     @classmethod
     @transaction.atomic
-    def complete_scan(cls, skill: Skill, *, passed: bool, issues: list[str], warnings: list[str] | None = None) -> Skill:
+    def complete_scan(cls, skill: Skill, *, passed: bool, issues: list[str], warnings: list[str] | None = None, version_id: int | None = None) -> Skill:
         """Called after async scan completes."""
-        latest_version = skill.versions.order_by("-created_at").first()
+        if version_id:
+            latest_version = skill.versions.filter(id=version_id).first()
+        else:
+            latest_version = skill.versions.order_by("-created_at").first()
         is_version_update = skill.status == SkillStatus.APPROVED
 
         # Determine structured scan result

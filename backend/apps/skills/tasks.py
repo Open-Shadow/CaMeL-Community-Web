@@ -98,6 +98,7 @@ def run_skill_scan(skill_id: int):
 
     SkillService.complete_scan(
         skill, passed=passed, issues=issues, warnings=warnings if warnings else None,
+        version_id=pending_version.id if pending_version else None,
     )
     return {"result": result, "passed": passed, "issues": issues, "warnings": warnings}
 
