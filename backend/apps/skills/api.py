@@ -7,7 +7,7 @@ from ninja.responses import Status
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
-from common.permissions import AuthBearer
+from common.permissions import AuthBearer, OptionalAuthBearer
 from apps.skills.models import Skill, SkillStatus, SkillPurchase, VersionStatus
 from apps.skills.schemas import (
     SkillCreateInput, SkillUpdateInput, SkillOut,
@@ -15,7 +15,7 @@ from apps.skills.schemas import (
     SkillTrendingOut, SkillVersionOut,
     SkillRecommendationOut,
     SkillUsagePreferenceInput, SkillUsagePreferenceOut,
-    SkillPurchaseInput, SkillPurchaseOut,
+    SkillPurchaseInput, SkillPurchaseOut, SkillPurchaseDetailOut,
     SkillReportInput, SkillReportOut,
     MessageOut,
 )
@@ -155,17 +155,24 @@ def list_recommended_skills(request, limit: int = 8):
     ]
 
 
-@router.get("/purchased", response=List[SkillOut], auth=AuthBearer())
+@router.get("/purchased", response=List[SkillPurchaseDetailOut], auth=AuthBearer())
 def list_purchased_skills(request):
     purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill__creator").order_by("-created_at")
-    return [_skill_out(p.skill, request.auth) for p in purchases]
+    results = []
+    for p in purchases:
+        out = _skill_out(p.skill, request.auth)
+        out["purchase_id"] = p.id
+        out["paid_amount"] = float(p.paid_amount)
+        out["payment_type"] = p.payment_type
+        out["purchased_at"] = p.created_at.isoformat()
+        results.append(out)
+    return results
 
 
-@router.get("/{skill_id}", response=SkillOut)
+@router.get("/{skill_id}", response=SkillOut, auth=OptionalAuthBearer())
 def get_skill(request, skill_id: int):
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
-    request_user = getattr(request, "auth", None)
-    return _skill_out(skill, request_user)
+    return _skill_out(skill, request.auth)
 
 
 @router.patch("/{skill_id}", response=SkillOut, auth=AuthBearer())
@@ -253,7 +260,7 @@ def download_skill(request, skill_id: int, version: Optional[str] = None):
 
     # Check version-scoped security archive
     from apps.skills.models import VersionStatus
-    target_version_str = version or str(skill.current_version)
+    target_version_str = version or skill.current_version
     version_obj = skill.versions.filter(version=target_version_str).first()
     if version_obj and version_obj.status == VersionStatus.ARCHIVED:
         raise HttpError(403, "该版本已因安全原因被封禁，无法下载")

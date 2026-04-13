@@ -11,7 +11,7 @@ export interface SkillSummary {
   price: number | null
   status: 'DRAFT' | 'SCANNING' | 'APPROVED' | 'REJECTED' | 'ARCHIVED'
   is_featured: boolean
-  current_version: number
+  current_version: string
   total_calls: number
   avg_rating: number
   review_count: number
@@ -145,7 +145,7 @@ export async function getMySkills() {
 
 export async function createSkill(payload: SkillCreatePayload) {
   const formData = new FormData()
-  formData.append('package_file', payload.package_file)
+  formData.append('package', payload.package_file)
   formData.append('name', payload.name)
   formData.append('description', payload.description)
   formData.append('category', payload.category)
@@ -234,7 +234,7 @@ export async function updateSkillUsagePreference(
 
 export async function updateSkill(skillId: number, payload: SkillUpdatePayload) {
   const formData = new FormData()
-  if (payload.package_file) formData.append('package_file', payload.package_file)
+  if (payload.package_file) formData.append('package', payload.package_file)
   if (payload.name != null) formData.append('name', payload.name)
   if (payload.description != null) formData.append('description', payload.description)
   if (payload.category != null) formData.append('category', payload.category)
@@ -242,7 +242,7 @@ export async function updateSkill(skillId: number, payload: SkillUpdatePayload) 
   if (payload.pricing_model != null) formData.append('pricing_model', payload.pricing_model)
   if (payload.price != null) formData.append('price', String(payload.price))
   if (payload.changelog) formData.append('changelog', payload.changelog)
-  const response = await api.put<SkillSummary>(`/skills/${skillId}`, formData, {
+  const response = await api.patch<SkillSummary>(`/skills/${skillId}`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return response.data
@@ -267,7 +267,7 @@ export interface SkillPurchaseDetail {
   price: number | null
   status: string
   is_featured: boolean
-  current_version: number
+  current_version: string
   total_calls: number
   avg_rating: number
   review_count: number
@@ -298,10 +298,21 @@ export async function purchaseSkill(skillId: number) {
   return response.data
 }
 
-export async function downloadSkill(skillId: number) {
-  // The backend returns a 302 redirect to a pre-signed URL.
-  // We use window.location to follow it as a download.
-  window.location.href = `/api/skills/${skillId}/download`
+export async function downloadSkill(skillId: number, version?: string) {
+  // Backend requires auth and returns a 302 redirect to a pre-signed URL.
+  // Use an authenticated request with redirect: 'manual' to capture the URL,
+  // then open it in a new tab for the actual download.
+  const params = version ? `?version=${encodeURIComponent(version)}` : ''
+  const response = await api.get(`/skills/${skillId}/download${params}`, {
+    maxRedirects: 0,
+    validateStatus: (status: number) => status >= 200 && status < 400,
+  })
+  // axios follows redirects by default in the browser, so response.request.responseURL
+  // contains the final URL. Use it directly.
+  const downloadUrl = response.request?.responseURL || response.headers?.location
+  if (downloadUrl) {
+    window.open(downloadUrl, '_blank')
+  }
 }
 
 export async function listPurchasedSkills() {

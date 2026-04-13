@@ -34,7 +34,7 @@ class SkillOut(Schema):
     price: Optional[float]
     status: str
     is_featured: bool
-    current_version: int
+    current_version: str
     total_calls: int
     avg_rating: float
     review_count: int
@@ -136,7 +136,7 @@ class SkillPurchaseDetailOut(Schema):
     price: Optional[float]
     status: str
     is_featured: bool
-    current_version: int
+    current_version: str
     total_calls: int
     avg_rating: float
     review_count: int

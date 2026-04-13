@@ -238,6 +238,7 @@ class SkillService:
         'readme_html', and 'version' (SemVer string) in addition to metadata.
         """
         payload = cls._validate_metadata(data)
+        version_str = data.get("version", "1.0.0")
         skill = Skill.objects.create(
             creator=creator,
             slug=cls._create_unique_slug(payload["name"], creator.id),
@@ -245,12 +246,12 @@ class SkillService:
             package_sha256=data["package_sha256"],
             package_size=data["package_size"],
             readme_html=data.get("readme_html", ""),
-            current_version=1,
+            current_version=version_str,
             **payload,
         )
         SkillVersion.objects.create(
             skill=skill,
-            version=data.get("version", "1.0.0"),
+            version=version_str,
             package_file=data["package_file"],
             package_sha256=data["package_sha256"],
             changelog=data.get("changelog", "初始版本"),
@@ -274,14 +275,17 @@ class SkillService:
             setattr(skill, field, value)
 
         if has_new_package:
+            new_version = data.get("version")
+            if not new_version:
+                raise ValueError("新版本文件包必须包含版本号")
             skill.package_file = data["package_file"]
             skill.package_sha256 = data["package_sha256"]
             skill.package_size = data["package_size"]
             skill.readme_html = data.get("readme_html", skill.readme_html)
-            skill.current_version += 1
+            skill.current_version = new_version
             SkillVersion.objects.create(
                 skill=skill,
-                version=data.get("version", f"{skill.current_version}.0.0"),
+                version=new_version,
                 package_file=data["package_file"],
                 package_sha256=data["package_sha256"],
                 changelog=data.get("changelog", "更新版本"),
@@ -503,7 +507,7 @@ class SkillService:
 
         # Determine which version to use
         preference = SkillUsagePreference.objects.filter(skill=skill, user=caller).first()
-        selected_version_str = str(skill.current_version)
+        selected_version_str = skill.current_version
         selected_version_obj = skill.versions.filter(version=selected_version_str).first()
 
         if preference and not preference.auto_follow_latest and preference.locked_version:
@@ -517,9 +521,10 @@ class SkillService:
 
         start = time.time()
 
-        # Try to read prompts from package
+        # Try to read prompts from package — use version-specific file if available
+        package = selected_version_obj.package_file if selected_version_obj else skill.package_file
         output_text = cls._execute_from_package(
-            skill.package_file, input_text, selected_version_obj,
+            package, input_text, selected_version_obj,
         )
 
         duration_ms = max(1, int((time.time() - start) * 1000))
@@ -545,9 +550,12 @@ class SkillService:
     def _execute_from_package(
         cls, package_file, user_input: str, version_obj,
     ) -> str:
-        """Read prompt templates from package and execute on-platform."""
+        """Read prompt templates from package and execute on-platform.
+
+        Raises ValueError if the package has no prompts/ directory (download-only skill).
+        """
         if not package_file:
-            return "[模拟输出] 未找到文件包。"
+            raise ValueError("未找到文件包，该 Skill 仅支持下载使用")
 
         try:
             import zipfile
@@ -567,7 +575,7 @@ class SkillService:
             user_template = file_contents.get("prompts/user_template.txt") or file_contents.get("prompts/user_template.md", "")
 
             if not system_prompt and not user_template:
-                return "[模拟输出] 该 Skill 不包含可执行 Prompt 模板。"
+                raise ValueError("该 Skill 仅支持下载使用，不包含可执行 Prompt 模板")
 
             # Apply user input to template
             if user_template:
@@ -577,8 +585,12 @@ class SkillService:
 
             return f"[基于 Prompt 模板执行] {rendered[:200]}"
 
+        except zipfile.BadZipFile:
+            raise ValueError("文件包解析失败")
+        except ValueError:
+            raise
         except Exception:
-            return "[模拟输出] 文件包解析失败，返回模拟结果。"
+            raise ValueError("文件包解析失败")
 
     @staticmethod
     @transaction.atomic

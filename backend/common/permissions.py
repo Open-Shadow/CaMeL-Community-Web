@@ -19,6 +19,36 @@ class AuthBearer(HttpBearer):
             return None
 
 
+class OptionalAuthBearer(HttpBearer):
+    """Like AuthBearer but doesn't reject unauthenticated requests.
+
+    Sets request.auth to the user if a valid token is present, or None otherwise.
+    """
+
+    def authenticate(self, request, token):
+        from rest_framework_simplejwt.tokens import AccessToken
+        from rest_framework_simplejwt.exceptions import TokenError
+        try:
+            data = AccessToken(token)
+            user = User.objects.get(id=data['user_id'])
+            if not user.is_active:
+                return None
+            return user
+        except (TokenError, User.DoesNotExist):
+            return None
+
+    def __call__(self, request):
+        # Override to not raise 401 when no Authorization header present
+        headers = request.headers
+        auth_value = headers.get("Authorization", "")
+        if not auth_value:
+            return None
+        parts = auth_value.split(" ")
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            return None
+        return self.authenticate(request, parts[1])
+
+
 def public_api(func):
     """No authentication required."""
     return func

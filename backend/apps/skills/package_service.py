@@ -66,7 +66,7 @@ class PackageService:
         }
 
         # Pass through frontmatter metadata for auto-fill
-        for key in ("name", "description", "category", "tags"):
+        for key in ("name", "description", "category", "tags", "output_format", "example_input", "example_output"):
             if key in frontmatter:
                 result.setdefault(key, frontmatter[key])
 

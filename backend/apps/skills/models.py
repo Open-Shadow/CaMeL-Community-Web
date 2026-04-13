@@ -53,7 +53,7 @@ class Skill(models.Model):
     price = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=SkillStatus.choices, default=SkillStatus.DRAFT)
     is_featured = models.BooleanField(default=False)
-    current_version = models.IntegerField(default=1)
+    current_version = models.CharField(max_length=20, default="1.0.0")
     total_calls = models.IntegerField(default=0)
     avg_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     review_count = models.IntegerField(default=0)

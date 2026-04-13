@@ -48,7 +48,7 @@ export default function MarketplacePage() {
             tags: [],
             status: 'APPROVED' as const,
             is_featured: false,
-            current_version: 1,
+            current_version: '1.0.0',
             rejection_reason: '',
             readme_html: '',
             package_size: 0,
