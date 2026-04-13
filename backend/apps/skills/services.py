@@ -1,6 +1,7 @@
 """Skills business logic."""
 from datetime import timedelta
 from collections import Counter
+from io import BytesIO
 import re
 import time
 from decimal import Decimal
@@ -358,6 +359,11 @@ class SkillService:
             content=f"「{skill.name}」正在进行自动安全扫描。",
             reference_id=str(skill.id),
         )
+
+        # Trigger async security scan
+        from apps.skills.tasks import run_skill_scan
+        run_skill_scan.delay(skill.id)
+
         return skill
 
     @classmethod
@@ -482,9 +488,9 @@ class SkillService:
         cache.delete(SkillService.TRENDING_CACHE_KEY)
         return skill
 
-    @staticmethod
+    @classmethod
     @transaction.atomic
-    def call(skill: Skill, caller, input_text: str) -> SkillCall:
+    def call(cls, skill: Skill, caller, input_text: str) -> SkillCall:
         if skill.status != SkillStatus.APPROVED:
             raise ValueError("该技能暂不可用")
         if not input_text.strip():
@@ -495,20 +501,33 @@ class SkillService:
             if not SkillPurchase.objects.filter(skill=skill, user=caller).exists():
                 raise ValueError("请先购买该 Skill")
 
-        start = time.time()
-        output_text = f"[模拟输出] 基于输入「{input_text[:80]}」的处理结果。"
-        duration_ms = max(1, int((time.time() - start) * 1000))
-
+        # Determine which version to use
         preference = SkillUsagePreference.objects.filter(skill=skill, user=caller).first()
-        selected_version = str(skill.current_version)
+        selected_version_str = str(skill.current_version)
+        selected_version_obj = skill.versions.filter(version=selected_version_str).first()
+
         if preference and not preference.auto_follow_latest and preference.locked_version:
             if skill.versions.filter(version=preference.locked_version).exists():
-                selected_version = preference.locked_version
+                selected_version_str = preference.locked_version
+                selected_version_obj = skill.versions.filter(version=selected_version_str).first()
+
+        # Check version is not security-archived
+        if selected_version_obj and selected_version_obj.status == VersionStatus.ARCHIVED:
+            raise ValueError("该版本已因安全原因被封禁，无法调用")
+
+        start = time.time()
+
+        # Try to read prompts from package
+        output_text = cls._execute_from_package(
+            skill.package_file, input_text, selected_version_obj,
+        )
+
+        duration_ms = max(1, int((time.time() - start) * 1000))
 
         call = SkillCall.objects.create(
             skill=skill,
             caller=caller,
-            skill_version=selected_version,
+            skill_version=selected_version_str,
             input_text=input_text.strip(),
             output_text=output_text,
             duration_ms=duration_ms,
@@ -521,6 +540,45 @@ class SkillService:
             CreditService.add_credit(skill.creator, CreditAction.SKILL_CALLED, str(skill.id))
 
         return call
+
+    @classmethod
+    def _execute_from_package(
+        cls, package_file, user_input: str, version_obj,
+    ) -> str:
+        """Read prompt templates from package and execute on-platform."""
+        if not package_file:
+            return "[模拟输出] 未找到文件包。"
+
+        try:
+            import zipfile
+            from io import BytesIO
+
+            content = package_file.read() if hasattr(package_file, 'read') else package_file
+            if hasattr(package_file, 'seek'):
+                package_file.seek(0)
+
+            file_contents: dict[str, str] = {}
+            with zipfile.ZipFile(BytesIO(content if isinstance(content, bytes) else content.read())) as zf:
+                for name in zf.namelist():
+                    if name.startswith("prompts/") and name.endswith((".txt", ".md")):
+                        file_contents[name] = zf.read(name).decode("utf-8", errors="replace")
+
+            system_prompt = file_contents.get("prompts/system.txt") or file_contents.get("prompts/system.md", "")
+            user_template = file_contents.get("prompts/user_template.txt") or file_contents.get("prompts/user_template.md", "")
+
+            if not system_prompt and not user_template:
+                return "[模拟输出] 该 Skill 不包含可执行 Prompt 模板。"
+
+            # Apply user input to template
+            if user_template:
+                rendered = user_template.replace("{{input}}", user_input).replace("{{INPUT}}", user_input).replace("{$input}", user_input)
+            else:
+                rendered = user_input
+
+            return f"[基于 Prompt 模板执行] {rendered[:200]}"
+
+        except Exception:
+            return "[模拟输出] 文件包解析失败，返回模拟结果。"
 
     @staticmethod
     @transaction.atomic

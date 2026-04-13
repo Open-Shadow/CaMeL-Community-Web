@@ -24,8 +24,8 @@ from apps.skills.services import SkillService, SkillPurchaseService, SkillReport
 router = Router(tags=["skills"])
 
 
-def _skill_out(skill: Skill) -> dict:
-    return {
+def _skill_out(skill: Skill, request_user=None) -> dict:
+    out = {
         "id": skill.id,
         "name": skill.name,
         "slug": skill.slug,
@@ -49,6 +49,14 @@ def _skill_out(skill: Skill) -> dict:
         "created_at": skill.created_at.isoformat(),
         "updated_at": skill.updated_at.isoformat(),
     }
+    # Indicate if requester has purchased (for detail page UI decisions)
+    if request_user:
+        out["has_purchased"] = (
+            skill.creator_id == request_user.id
+            or skill.pricing_model == "FREE"
+            or SkillPurchase.objects.filter(skill=skill, user=request_user).exists()
+        )
+    return out
 
 
 @router.post("", response={201: SkillOut}, auth=AuthBearer())
@@ -66,7 +74,7 @@ def create_skill(request, data: SkillCreateInput, package: UploadedFile = File(.
         skill = SkillService.create(request.auth, merged)
     except ValueError as e:
         raise HttpError(400, str(e))
-    return Status(201, _skill_out(skill))
+    return Status(201, _skill_out(skill, request.auth))
 
 
 @router.get("", response=List[SkillOut])
@@ -101,7 +109,7 @@ def list_skills(request, category: Optional[str] = None, q: Optional[str] = None
 @router.get("/mine", response=List[SkillOut], auth=AuthBearer())
 def get_my_skills(request):
     qs = Skill.objects.select_related("creator").filter(creator=request.auth)
-    return [_skill_out(s) for s in qs]
+    return [_skill_out(s, request.auth) for s in qs]
 
 
 @router.get("/trending/list", response=List[SkillTrendingOut])
@@ -147,25 +155,17 @@ def list_recommended_skills(request, limit: int = 8):
     ]
 
 
-@router.get("/purchased", response=List[SkillPurchaseOut], auth=AuthBearer())
+@router.get("/purchased", response=List[SkillOut], auth=AuthBearer())
 def list_purchased_skills(request):
-    purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill").order_by("-created_at")
-    return [
-        {
-            "id": p.id,
-            "skill_id": p.skill_id,
-            "paid_amount": float(p.paid_amount),
-            "payment_type": p.payment_type,
-            "created_at": p.created_at.isoformat(),
-        }
-        for p in purchases
-    ]
+    purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill__creator").order_by("-created_at")
+    return [_skill_out(p.skill, request.auth) for p in purchases]
 
 
 @router.get("/{skill_id}", response=SkillOut)
 def get_skill(request, skill_id: int):
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
-    return _skill_out(skill)
+    request_user = getattr(request, "auth", None)
+    return _skill_out(skill, request_user)
 
 
 @router.patch("/{skill_id}", response=SkillOut, auth=AuthBearer())
@@ -185,7 +185,7 @@ def update_skill(request, skill_id: int, data: SkillUpdateInput, package: Upload
         skill = SkillService.update(skill, merged)
     except ValueError as e:
         raise HttpError(400, str(e))
-    return _skill_out(skill)
+    return _skill_out(skill, request.auth)
 
 
 @router.post("/{skill_id}/submit", response=SkillOut, auth=AuthBearer())
@@ -195,7 +195,7 @@ def submit_skill(request, skill_id: int):
         skill = SkillService.submit_for_review(skill)
     except ValueError as e:
         raise HttpError(400, str(e))
-    return _skill_out(skill)
+    return _skill_out(skill, request.auth)
 
 
 @router.post("/{skill_id}/archive", response=SkillOut, auth=AuthBearer())
@@ -205,7 +205,7 @@ def archive_skill(request, skill_id: int):
         skill = SkillService.archive(skill)
     except ValueError as exc:
         raise HttpError(400, str(exc))
-    return _skill_out(skill)
+    return _skill_out(skill, request.auth)
 
 
 @router.post("/{skill_id}/restore", response=SkillOut, auth=AuthBearer())
@@ -215,7 +215,7 @@ def restore_skill(request, skill_id: int):
         skill = SkillService.restore(skill)
     except ValueError as exc:
         raise HttpError(400, str(exc))
-    return _skill_out(skill)
+    return _skill_out(skill, request.auth)
 
 
 @router.delete("/{skill_id}", response=MessageOut, auth=AuthBearer())
@@ -242,8 +242,8 @@ def purchase_skill(request, skill_id: int):
 
 
 @router.get("/{skill_id}/download", auth=AuthBearer())
-def download_skill(request, skill_id: int):
-    skill = get_object_or_404(Skill, id=skill_id)
+def download_skill(request, skill_id: int, version: Optional[str] = None):
+    skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
 
     if not SkillPurchaseService.has_access(skill, request.auth):
         raise HttpError(403, "请先购买该 Skill")
@@ -251,8 +251,20 @@ def download_skill(request, skill_id: int):
     if not skill.package_file:
         raise HttpError(404, "Skill 文件包不存在")
 
+    # Check version-scoped security archive
+    from apps.skills.models import VersionStatus
+    target_version_str = version or str(skill.current_version)
+    version_obj = skill.versions.filter(version=target_version_str).first()
+    if version_obj and version_obj.status == VersionStatus.ARCHIVED:
+        raise HttpError(403, "该版本已因安全原因被封禁，无法下载")
+
     from apps.skills.package_service import PackageService
-    url = PackageService.generate_download_url(skill.package_file.name)
+    # Use version-scoped file if available
+    file_to_download = version_obj.package_file if version_obj else skill.package_file
+    if not file_to_download:
+        raise HttpError(404, "指定版本文件包不存在")
+
+    url = PackageService.generate_download_url(file_to_download.name)
 
     skill.download_count += 1
     skill.save(update_fields=["download_count"])

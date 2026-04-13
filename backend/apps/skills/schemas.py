@@ -46,6 +46,7 @@ class SkillOut(Schema):
     creator_name: str
     created_at: str
     updated_at: str
+    has_purchased: bool = False  # only present when authenticated
 
 
 class SkillCallInput(Schema):
@@ -120,6 +121,38 @@ class SkillPurchaseOut(Schema):
     paid_amount: float
     payment_type: str
     created_at: str
+
+
+class SkillPurchaseDetailOut(Schema):
+    """Full skill info with purchase metadata for the 'My Purchased Skills' page."""
+    # Skill fields
+    id: int
+    name: str
+    slug: str
+    description: str
+    category: str
+    tags: List[str]
+    pricing_model: str
+    price: Optional[float]
+    status: str
+    is_featured: bool
+    current_version: int
+    total_calls: int
+    avg_rating: float
+    review_count: int
+    rejection_reason: str
+    readme_html: str
+    package_size: int
+    download_count: int
+    creator_id: int
+    creator_name: str
+    created_at: str
+    updated_at: str
+    # Purchase metadata
+    purchase_id: int
+    paid_amount: float
+    payment_type: str
+    purchased_at: str
 
 
 class SkillReportInput(Schema):
