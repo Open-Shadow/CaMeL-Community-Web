@@ -13,11 +13,13 @@ from decimal import Decimal
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client as DjangoClient
+from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.accounts.models import User, UserRole
 from apps.skills.models import (
     Skill,
+    SkillCall,
     SkillPurchase,
     SkillVersion,
     PricingModel,
@@ -62,6 +64,22 @@ def _jwt_header(user) -> dict:
     """Return an Authorization header dict for the given user."""
     token = str(AccessToken.for_user(user))
     return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+
+def _multipart_patch(client, path, data, **extra):
+    """PATCH with multipart-encoded data.
+
+    Django's test client ``patch()`` does not encode dicts as multipart
+    (unlike ``post()``).  We manually encode and pass encoded bytes so
+    file fields are transmitted correctly.
+    """
+    encoded = encode_multipart(BOUNDARY, data)
+    return client.patch(
+        path,
+        data=encoded,
+        content_type=MULTIPART_CONTENT,
+        **extra,
+    )
 
 
 @pytest.fixture
@@ -253,14 +271,15 @@ class TestDuplicateVersionValidation:
     """Tests for duplicate version rejection before DB insert."""
 
     @pytest.mark.django_db
-    def test_duplicate_version_rejected(self, approved_skill):
+    def test_same_version_rejected_by_monotonic_check(self, approved_skill):
+        """Uploading same version as live is rejected by the monotonic SemVer guard."""
         data = {
             "version": "1.0.0",
             "package_file": _make_zip({"SKILL.md": SKILL_MD.format(version="1.0.0")}),
             "package_sha256": "f" * 64,
             "package_size": 100,
         }
-        with pytest.raises(ValueError, match="已存在"):
+        with pytest.raises(ValueError, match="必须大于"):
             SkillService.update(approved_skill, data)
 
     @pytest.mark.django_db
@@ -520,7 +539,8 @@ class TestHTTPSkillUpdate:
         """PATCH /api/skills/{id} with new package creates pending version."""
         zip_bytes = _make_zip_bytes({"SKILL.md": SKILL_MD.format(version="2.0.0")})
         package = SimpleUploadedFile("test2.zip", zip_bytes, content_type="application/zip")
-        resp = client.patch(
+        resp = _multipart_patch(
+            client,
             f"/api/skills/{approved_skill.id}",
             data={
                 "name": "Test Skill",
@@ -542,11 +562,39 @@ class TestHTTPSkillUpdate:
         ).exists()
 
     @pytest.mark.django_db
-    def test_update_rejects_duplicate_version(self, client, user, approved_skill):
-        """PATCH /api/skills/{id} with existing version string returns 400."""
+    def test_update_rejects_same_version_monotonic(self, client, user, approved_skill):
+        """PATCH /api/skills/{id} with same version as live returns 400 (monotonic guard)."""
         zip_bytes = _make_zip_bytes({"SKILL.md": SKILL_MD.format(version="1.0.0")})
         package = SimpleUploadedFile("dup.zip", zip_bytes, content_type="application/zip")
-        resp = client.patch(
+        resp = _multipart_patch(
+            client,
+            f"/api/skills/{approved_skill.id}",
+            data={
+                "name": "Test Skill",
+                "description": "A test skill",
+                "category": "CODE_DEV",
+                "package": package,
+            },
+            **_jwt_header(user),
+        )
+        assert resp.status_code == 400
+        assert "必须大于" in resp.json().get("detail", "")
+
+    @pytest.mark.django_db
+    def test_update_rejects_duplicate_rejected_version(self, client, user, approved_skill):
+        """PATCH /api/skills/{id} with a version that exists as REJECTED returns 400 (duplicate guard)."""
+        # Create a rejected version at 2.0.0
+        SkillVersion.objects.create(
+            skill=approved_skill,
+            version="2.0.0",
+            package_file=_make_zip({"SKILL.md": SKILL_MD.format(version="2.0.0")}),
+            package_sha256="d" * 64,
+            status=VersionStatus.REJECTED,
+        )
+        zip_bytes = _make_zip_bytes({"SKILL.md": SKILL_MD.format(version="2.0.0")})
+        package = SimpleUploadedFile("dup2.zip", zip_bytes, content_type="application/zip")
+        resp = _multipart_patch(
+            client,
             f"/api/skills/{approved_skill.id}",
             data={
                 "name": "Test Skill",
@@ -834,3 +882,229 @@ class TestHTTPCallDownloadOnly:
         assert resp.status_code == 400
         body = resp.json()
         assert "下载" in body.get("detail", "")
+
+
+class TestHTTPSkillSubmit:
+    """HTTP-level tests for the submit-for-review endpoint."""
+
+    @pytest.mark.django_db
+    def test_submit_draft_skill(self, client, user):
+        """POST /api/skills/{id}/submit transitions DRAFT skill to SCANNING."""
+        skill = Skill.objects.create(
+            creator=user,
+            name="Draft Skill",
+            slug="draft-skill-submit",
+            description="A draft skill",
+            category="CODE_DEV",
+            status=SkillStatus.DRAFT,
+            package_file=_make_zip({"SKILL.md": SKILL_MD.format(version="1.0.0")}),
+            package_sha256="s" * 64,
+            package_size=100,
+            current_version="1.0.0",
+        )
+        SkillVersion.objects.create(
+            skill=skill, version="1.0.0",
+            package_file=skill.package_file,
+            package_sha256="s" * 64,
+            status=VersionStatus.SCANNING,
+        )
+        resp = client.post(
+            f"/api/skills/{skill.id}/submit",
+            **_jwt_header(user),
+        )
+        assert resp.status_code == 200, resp.content
+        body = resp.json()
+        assert body["status"] == SkillStatus.SCANNING
+
+    @pytest.mark.django_db
+    def test_submit_approved_skill_with_pending_version(self, client, user, approved_skill):
+        """POST /api/skills/{id}/submit on APPROVED skill with pending version succeeds."""
+        SkillVersion.objects.create(
+            skill=approved_skill, version="2.0.0",
+            package_file=_make_zip({"SKILL.md": SKILL_MD.format(version="2.0.0")}),
+            package_sha256="q" * 64,
+            status=VersionStatus.SCANNING,
+        )
+        resp = client.post(
+            f"/api/skills/{approved_skill.id}/submit",
+            **_jwt_header(user),
+        )
+        assert resp.status_code == 200, resp.content
+        body = resp.json()
+        # Skill stays approved — only the version is pending
+        assert body["status"] == SkillStatus.APPROVED
+
+    @pytest.mark.django_db
+    def test_submit_without_package_rejected(self, client, user):
+        """POST /api/skills/{id}/submit without package returns 400."""
+        skill = Skill.objects.create(
+            creator=user,
+            name="No Package",
+            slug="no-package-submit",
+            description="Missing package",
+            category="CODE_DEV",
+            status=SkillStatus.DRAFT,
+        )
+        resp = client.post(
+            f"/api/skills/{skill.id}/submit",
+            **_jwt_header(user),
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    def test_submit_unauthenticated_rejected(self, client, approved_skill):
+        """POST /api/skills/{id}/submit without auth returns 401."""
+        resp = client.post(f"/api/skills/{approved_skill.id}/submit")
+        assert resp.status_code == 401
+
+
+class TestHTTPVersionTargetedModeration:
+    """HTTP-level tests for version-targeted admin review."""
+
+    @pytest.mark.django_db
+    def test_approve_specific_pending_version(self, client, admin_user, user, approved_skill):
+        """POST /api/admin/skills/{id}/review with version_id approves that exact version."""
+        pending = SkillVersion.objects.create(
+            skill=approved_skill, version="2.0.0",
+            package_file=_make_zip({"SKILL.md": SKILL_MD.format(version="2.0.0")}),
+            package_sha256="v" * 64,
+            status=VersionStatus.SCANNING,
+        )
+        resp = client.post(
+            f"/api/admin/skills/{approved_skill.id}/review",
+            data=json.dumps({
+                "action": "APPROVE",
+                "reason": "",
+                "version_id": pending.id,
+            }),
+            content_type="application/json",
+            **_jwt_header(admin_user),
+        )
+        assert resp.status_code == 200, resp.content
+        body = resp.json()
+        assert body["status"] == SkillStatus.APPROVED
+        # Version should now be approved and promoted
+        pending.refresh_from_db()
+        assert pending.status == VersionStatus.APPROVED
+        approved_skill.refresh_from_db()
+        assert approved_skill.current_version == "2.0.0"
+
+    @pytest.mark.django_db
+    def test_reject_specific_pending_version(self, client, admin_user, user, approved_skill):
+        """POST /api/admin/skills/{id}/review with version_id rejects that exact version."""
+        pending = SkillVersion.objects.create(
+            skill=approved_skill, version="3.0.0",
+            package_file=_make_zip({"SKILL.md": SKILL_MD.format(version="3.0.0")}),
+            package_sha256="w" * 64,
+            status=VersionStatus.SCANNING,
+        )
+        resp = client.post(
+            f"/api/admin/skills/{approved_skill.id}/review",
+            data=json.dumps({
+                "action": "REJECT",
+                "reason": "Quality issues",
+                "version_id": pending.id,
+            }),
+            content_type="application/json",
+            **_jwt_header(admin_user),
+        )
+        assert resp.status_code == 200
+        pending.refresh_from_db()
+        assert pending.status == VersionStatus.REJECTED
+        # Skill stays approved
+        approved_skill.refresh_from_db()
+        assert approved_skill.status == SkillStatus.APPROVED
+        assert approved_skill.current_version == "1.0.0"
+
+    @pytest.mark.django_db
+    def test_approve_nonexistent_version_id_returns_400(self, client, admin_user, user, approved_skill):
+        """POST /api/admin/skills/{id}/review with invalid version_id returns 400."""
+        SkillVersion.objects.create(
+            skill=approved_skill, version="2.0.0",
+            package_file=_make_zip({"SKILL.md": SKILL_MD.format(version="2.0.0")}),
+            package_sha256="u" * 64,
+            status=VersionStatus.SCANNING,
+        )
+        resp = client.post(
+            f"/api/admin/skills/{approved_skill.id}/review",
+            data=json.dumps({
+                "action": "APPROVE",
+                "reason": "",
+                "version_id": 99999,
+            }),
+            content_type="application/json",
+            **_jwt_header(admin_user),
+        )
+        assert resp.status_code == 400
+
+
+class TestHTTPDualReviewEligibility:
+    """HTTP-level tests for dual review eligibility: SkillCall OR 7-day SkillPurchase (task47)."""
+
+    @pytest.mark.django_db
+    def test_review_allowed_via_skill_call(self, client, buyer, approved_skill):
+        """POST /api/skills/{id}/reviews succeeds when user has called the skill."""
+        SkillCall.objects.create(
+            skill=approved_skill,
+            caller=buyer,
+            skill_version="1.0.0",
+            input_text="test",
+            output_text="result",
+        )
+        resp = client.post(
+            f"/api/skills/{approved_skill.id}/reviews",
+            data=json.dumps({"rating": 5, "comment": "Great!", "tags": []}),
+            content_type="application/json",
+            **_jwt_header(buyer),
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["rating"] == 5
+
+    @pytest.mark.django_db
+    def test_review_allowed_via_mature_purchase(self, client, buyer, approved_skill):
+        """POST /api/skills/{id}/reviews succeeds when purchase is 7+ days old."""
+        from django.utils import timezone
+        from datetime import timedelta
+        purchase = SkillPurchase.objects.create(
+            skill=approved_skill, user=buyer,
+            paid_amount=Decimal("0"), payment_type="FREE",
+        )
+        # Backdate the purchase to 8 days ago
+        purchase.created_at = timezone.now() - timedelta(days=8)
+        SkillPurchase.objects.filter(id=purchase.id).update(created_at=purchase.created_at)
+        resp = client.post(
+            f"/api/skills/{approved_skill.id}/reviews",
+            data=json.dumps({"rating": 4, "comment": "Good", "tags": []}),
+            content_type="application/json",
+            **_jwt_header(buyer),
+        )
+        assert resp.status_code == 201
+
+    @pytest.mark.django_db
+    def test_review_rejected_no_call_no_purchase(self, client, buyer, approved_skill):
+        """POST /api/skills/{id}/reviews rejected when user has no call and no purchase."""
+        resp = client.post(
+            f"/api/skills/{approved_skill.id}/reviews",
+            data=json.dumps({"rating": 3, "comment": "Test", "tags": []}),
+            content_type="application/json",
+            **_jwt_header(buyer),
+        )
+        assert resp.status_code == 400
+        assert "调用" in resp.json().get("detail", "") or "购买" in resp.json().get("detail", "")
+
+    @pytest.mark.django_db
+    def test_review_rejected_immature_purchase(self, client, buyer, approved_skill):
+        """POST /api/skills/{id}/reviews rejected when purchase is less than 7 days old."""
+        SkillPurchase.objects.create(
+            skill=approved_skill, user=buyer,
+            paid_amount=Decimal("0"), payment_type="FREE",
+        )
+        # Purchase just created — less than 7 days
+        resp = client.post(
+            f"/api/skills/{approved_skill.id}/reviews",
+            data=json.dumps({"rating": 2, "comment": "Too soon", "tags": []}),
+            content_type="application/json",
+            **_jwt_header(buyer),
+        )
+        assert resp.status_code == 400

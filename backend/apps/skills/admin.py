@@ -133,11 +133,23 @@ class SkillReportAdmin(admin.ModelAdmin):
 
 @admin.register(SkillVersion)
 class SkillVersionAdmin(admin.ModelAdmin):
-    list_display = ("skill", "version", "status_badge", "package_sha256_short", "created_at")
-    list_filter = ("status",)
+    list_display = ("skill", "version", "status_badge", "scan_result_badge", "package_sha256_short", "created_at")
+    list_filter = ("status", "scan_result")
     search_fields = ("skill__name", "version")
-    readonly_fields = ("package_sha256", "created_at")
+    readonly_fields = ("package_sha256", "scan_result", "scan_warnings", "created_at")
     actions = ["archive_version_selected", "reinstate_version_selected"]
+
+    fieldsets = [
+        (None, {
+            "fields": ("skill", "version", "status", "package_file", "package_sha256", "changelog"),
+        }),
+        ("扫描结果", {
+            "fields": ("scan_result", "scan_warnings"),
+        }),
+        ("时间", {
+            "fields": ("created_at",),
+        }),
+    ]
 
     def status_badge(self, obj):
         colors = {
@@ -152,6 +164,17 @@ class SkillVersionAdmin(admin.ModelAdmin):
             c=color, s=obj.status,
         )
     status_badge.short_description = "状态"
+
+    def scan_result_badge(self, obj):
+        if not obj.scan_result:
+            return "-"
+        colors = {"PASS": "#22c55e", "WARN": "#f59e0b", "FAIL": "#ef4444"}
+        color = colors.get(obj.scan_result, "#6b7280")
+        return format_html(
+            '<span style="background:{c};color:white;padding:2px 8px;border-radius:4px;font-size:11px">{s}</span>',
+            c=color, s=obj.scan_result,
+        )
+    scan_result_badge.short_description = "扫描结果"
 
     def package_sha256_short(self, obj):
         return obj.package_sha256[:12] + "..."

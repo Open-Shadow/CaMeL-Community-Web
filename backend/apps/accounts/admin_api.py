@@ -126,6 +126,7 @@ class SkillReviewQueueItemOutput(Schema):
     updated_at: str
     # Version-update review context (present when an approved skill has a pending version)
     pending_version: str | None = None
+    pending_version_id: int | None = None
     pending_version_changelog: str | None = None
 
 
@@ -139,6 +140,7 @@ class SkillReviewQueueOutput(Schema):
 class SkillReviewInput(Schema):
     action: str  # APPROVE | REJECT
     reason: str = ""
+    version_id: int | None = None  # Optional explicit version target
 
 
 class SkillFeaturedInput(Schema):
@@ -390,6 +392,7 @@ def _skill_queue_item_out(skill: Skill) -> dict:
         ).order_by("-created_at").first()
         if pending:
             out["pending_version"] = pending.version
+            out["pending_version_id"] = pending.id
             out["pending_version_changelog"] = pending.changelog
     return out
 
@@ -461,6 +464,7 @@ def review_skill(request, skill_id: int, data: SkillReviewInput):
             request.auth,
             approve=(action == "APPROVE"),
             reason=data.reason,
+            version_id=data.version_id,
         )
     except ValueError as exc:
         return 400, {"message": str(exc)}

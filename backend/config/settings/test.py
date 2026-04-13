@@ -27,6 +27,10 @@ INSTALLED_APPS = [app for app in INSTALLED_APPS if app != 'django.contrib.postgr
 EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
+# Run Celery tasks synchronously in tests (no Redis broker needed)
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+
 from django.contrib.postgres.fields import ArrayField  # noqa: E402
 
 

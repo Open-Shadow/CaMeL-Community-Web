@@ -587,13 +587,20 @@ class SkillService:
 
     @classmethod
     @transaction.atomic
-    def admin_approve(cls, skill: Skill) -> Skill:
+    def admin_approve(cls, skill: Skill, version_id: int | None = None) -> Skill:
         """Admin approves a skill or a pending version of an already-approved skill."""
         if skill.status == SkillStatus.APPROVED:
-            # Version-scoped approval: find the latest pending (SCANNING) version
-            pending = skill.versions.filter(
-                status=VersionStatus.SCANNING,
-            ).order_by("-created_at").first()
+            # Version-scoped approval: target explicit version or fallback to latest
+            if version_id:
+                pending = skill.versions.filter(
+                    id=version_id, status=VersionStatus.SCANNING,
+                ).first()
+                if not pending:
+                    raise ValueError("指定版本不存在或不在待审核状态")
+            else:
+                pending = skill.versions.filter(
+                    status=VersionStatus.SCANNING,
+                ).order_by("-created_at").first()
             if not pending:
                 raise ValueError("没有待审核的新版本")
 
@@ -646,7 +653,7 @@ class SkillService:
 
     @staticmethod
     @transaction.atomic
-    def admin_reject(skill: Skill, reason: str = "") -> Skill:
+    def admin_reject(skill: Skill, reason: str = "", version_id: int | None = None) -> Skill:
         """Admin rejects a skill or a pending version of an already-approved skill."""
         if skill.status not in (SkillStatus.SCANNING, SkillStatus.APPROVED):
             raise ValueError("当前 Skill 无法被拒绝")
@@ -654,11 +661,17 @@ class SkillService:
         review_reason = reason.strip() or "未通过人工审核，请根据规范调整后重新提交。"
 
         if skill.status == SkillStatus.APPROVED:
-            # Version-scoped rejection: reject only the pending version,
-            # keep the skill APPROVED and the live version intact.
-            pending = skill.versions.filter(
-                status=VersionStatus.SCANNING,
-            ).order_by("-created_at").first()
+            # Version-scoped rejection: target explicit version or fallback to latest
+            if version_id:
+                pending = skill.versions.filter(
+                    id=version_id, status=VersionStatus.SCANNING,
+                ).first()
+                if not pending:
+                    raise ValueError("指定版本不存在或不在待审核状态")
+            else:
+                pending = skill.versions.filter(
+                    status=VersionStatus.SCANNING,
+                ).order_by("-created_at").first()
             if not pending:
                 raise ValueError("没有待审核的新版本")
             pending.status = VersionStatus.REJECTED
@@ -692,11 +705,11 @@ class SkillService:
 
     @classmethod
     @transaction.atomic
-    def review(cls, skill: Skill, reviewer, *, approve: bool, reason: str = "") -> Skill:
+    def review(cls, skill: Skill, reviewer, *, approve: bool, reason: str = "", version_id: int | None = None) -> Skill:
         """Admin/moderator review action — approve or reject."""
         if approve:
-            return cls.admin_approve(skill)
-        return cls.admin_reject(skill, reason)
+            return cls.admin_approve(skill, version_id=version_id)
+        return cls.admin_reject(skill, reason, version_id=version_id)
 
     @staticmethod
     @transaction.atomic

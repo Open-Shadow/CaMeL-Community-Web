@@ -1,7 +1,9 @@
 """Skills API routes."""
 from typing import List, Optional
 
-from ninja import Router, File, UploadedFile
+import json
+
+from ninja import Router, File, Form, UploadedFile
 from ninja.errors import HttpError
 from ninja.responses import Status
 from django.shortcuts import get_object_or_404
@@ -10,7 +12,7 @@ from django.db.models import Q
 from common.permissions import AuthBearer, OptionalAuthBearer
 from apps.skills.models import Skill, SkillStatus, SkillPurchase, VersionStatus
 from apps.skills.schemas import (
-    SkillCreateInput, SkillUpdateInput, SkillOut,
+    SkillOut,
     SkillCallInput, SkillCallOut, SkillReviewInput, SkillReviewOut,
     SkillTrendingOut, SkillVersionOut,
     SkillRecommendationOut,
@@ -60,7 +62,17 @@ def _skill_out(skill: Skill, request_user=None) -> dict:
 
 
 @router.post("", response={201: SkillOut}, auth=AuthBearer())
-def create_skill(request, data: SkillCreateInput, package: UploadedFile = File(...)):
+def create_skill(
+    request,
+    package: UploadedFile = File(...),
+    name: str = Form(...),
+    description: str = Form(...),
+    category: str = Form(...),
+    tags: str = Form("[]"),
+    pricing_model: str = Form("FREE"),
+    price: Optional[str] = Form(None),
+    changelog: str = Form(""),
+):
     from apps.skills.package_service import PackageService
 
     try:
@@ -68,8 +80,26 @@ def create_skill(request, data: SkillCreateInput, package: UploadedFile = File(.
     except ValueError as e:
         raise HttpError(400, str(e))
 
-    merged = data.dict()
+    try:
+        parsed_tags = json.loads(tags) if tags else []
+    except (json.JSONDecodeError, TypeError):
+        parsed_tags = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+
+    merged = {
+        "name": name,
+        "description": description,
+        "category": category,
+        "tags": parsed_tags,
+        "pricing_model": pricing_model,
+        "price": float(price) if price else None,
+        "changelog": changelog,
+    }
+    # Package data (file, sha256, size, readme_html, version) goes in first;
+    # then form fields overlay so user-provided values take priority over
+    # frontmatter defaults extracted by PackageService.
+    form_fields = dict(merged)
     merged.update(pkg_data)
+    merged.update(form_fields)
     try:
         skill = SkillService.create(request.auth, merged)
     except ValueError as e:
@@ -176,9 +206,38 @@ def get_skill(request, skill_id: int):
 
 
 @router.patch("/{skill_id}", response=SkillOut, auth=AuthBearer())
-def update_skill(request, skill_id: int, data: SkillUpdateInput, package: UploadedFile = File(None)):
+def update_skill(
+    request,
+    skill_id: int,
+    package: UploadedFile = File(None),
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),
+    pricing_model: Optional[str] = Form(None),
+    price: Optional[str] = Form(None),
+    changelog: str = Form(""),
+):
     skill = get_object_or_404(Skill, id=skill_id, creator=request.auth)
-    merged = {k: v for k, v in data.dict().items() if v is not None}
+
+    merged: dict = {}
+    if name is not None:
+        merged["name"] = name
+    if description is not None:
+        merged["description"] = description
+    if category is not None:
+        merged["category"] = category
+    if tags is not None:
+        try:
+            merged["tags"] = json.loads(tags) if tags else []
+        except (json.JSONDecodeError, TypeError):
+            merged["tags"] = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    if pricing_model is not None:
+        merged["pricing_model"] = pricing_model
+    if price is not None:
+        merged["price"] = float(price)
+    if changelog:
+        merged["changelog"] = changelog
 
     if package:
         from apps.skills.package_service import PackageService
@@ -186,7 +245,10 @@ def update_skill(request, skill_id: int, data: SkillUpdateInput, package: Upload
             pkg_data = PackageService.process_upload(package)
         except ValueError as e:
             raise HttpError(400, str(e))
+        # Form fields take priority over frontmatter defaults from package
+        form_fields = dict(merged)
         merged.update(pkg_data)
+        merged.update(form_fields)
 
     try:
         skill = SkillService.update(skill, merged)
