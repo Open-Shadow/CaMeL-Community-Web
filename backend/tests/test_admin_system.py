@@ -23,7 +23,7 @@ from django.core.management.base import CommandError
 from django.db import IntegrityError, transaction
 from django.test import Client
 
-from apps.accounts.models import User, UserRole, sync_admin_flags
+from apps.accounts.models import CamelUser as User, UserRole
 from apps.accounts.services import AuthService
 
 pytestmark = pytest.mark.django_db

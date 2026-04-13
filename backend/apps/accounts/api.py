@@ -13,6 +13,7 @@ from ninja.responses import Status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+from apps.accounts.models import get_or_create_profile
 from apps.accounts.services import AuthService, InvitationError, InvitationService
 from apps.credits.models import CreditAction
 from apps.credits.services import CreditService
@@ -51,7 +52,7 @@ class UserOutput(Schema):
     email: str
     display_name: str
     avatar_url: str
-    role: str
+    role: int
     level: str
     credit_score: int
     email_verified: bool
@@ -188,7 +189,7 @@ def validate_invite_code(request, code: str):
 def login(request, data: LoginInput):
     """Login with email and password."""
     try:
-        user = User.objects.get(email__iexact=data.email.strip().lower(), is_active=True)
+        user = User.objects.get(email__iexact=data.email.strip().lower(), status=1)
     except User.DoesNotExist:
         return Status(401, {"message": "邮箱或密码错误"})
 
@@ -234,12 +235,13 @@ def logout(request, data: RefreshInput):
 def get_me(request):
     """Get current user info."""
     user = request.auth
+    profile = get_or_create_profile(user)
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "display_name": user.display_name,
-        "avatar_url": build_absolute_media_url(request, user.avatar_url),
+        "avatar_url": build_absolute_media_url(request, profile.avatar_url),
         "role": user.role,
         "level": user.level,
         "credit_score": user.credit_score,
@@ -316,7 +318,11 @@ class SSOCallbackInput(Schema):
 
 @router.post("/sso/callback", response={200: TokenOutput, 400: MessageOutput})
 def sso_callback(request, data: SSOCallbackInput):
-    """Exchange a CaMeL-api SSO token for Community JWT tokens."""
+    """Exchange a CaMeL-api SSO token for Community JWT tokens.
+
+    The user already exists in the shared ``users`` table (created by the main site).
+    We just look them up by ID and auto-create a CommunityProfile if needed.
+    """
     sso_secret = getattr(settings, "CAMEL_SSO_SECRET", "")
     if not sso_secret:
         return Status(400, {"message": "SSO 未配置"})
@@ -334,33 +340,20 @@ def sso_callback(request, data: SSOCallbackInput):
         return Status(400, {"message": "无效的 SSO 令牌"})
 
     camel_user_id = payload.get("user_id")
-    username = payload.get("username", "")
-    email = payload.get("email", "")
-    display_name = payload.get("display_name", "")
-
     if not camel_user_id:
         return Status(400, {"message": "SSO 令牌缺少用户信息"})
 
-    with transaction.atomic():
-        # Try to find existing user by email first, then by sso identifier
-        user = None
-        if email:
-            user = User.objects.filter(email__iexact=email.strip().lower()).first()
+    # User already exists in the shared users table — just look up
+    try:
+        user = User.objects.get(id=camel_user_id)
+    except User.DoesNotExist:
+        return Status(400, {"message": "用户不存在，请先在主站注册"})
 
-        if user is None:
-            # Create new user from SSO data
-            user = User.objects.create_user(
-                username=f"camel_{camel_user_id}_{uuid.uuid4().hex[:8]}",
-                email=email.strip().lower() if email else f"camel_{camel_user_id}@sso.local",
-                password=None,
-                display_name=display_name or username or f"CaMeL User {camel_user_id}",
-            )
-            CreditService.add_credit(
-                user,
-                CreditAction.REGISTER,
-                reference_id=f"sso-register:{user.id}",
-                idempotency_key=f"sso-register:{user.id}",
-            )
+    if not user.is_active:
+        return Status(400, {"message": "账号已被停用"})
+
+    # Auto-create CommunityProfile if this is the first SSO visit
+    get_or_create_profile(user)
 
     tokens = get_tokens_for_user(user)
     return Status(200, tokens)

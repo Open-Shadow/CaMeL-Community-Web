@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from django.utils import timezone
 
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser as User
 from apps.skills.models import (
     PricingModel,
     Skill,

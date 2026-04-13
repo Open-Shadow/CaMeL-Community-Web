@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.test import Client
 
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser as User
 from apps.accounts.services import AuthService
 from apps.skills.models import Skill, SkillStatus
 from apps.skills.services import SkillService

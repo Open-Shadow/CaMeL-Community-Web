@@ -2,13 +2,11 @@
 from decimal import Decimal
 
 from django.db import transaction
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from apps.accounts.models import CamelUser as User
 from apps.credits.models import CreditLog, CreditAction
 from common.constants import CreditLevelConfig, BOUNTY_FREEZE_THRESHOLD
-
-User = get_user_model()
 
 
 class CreditService:
@@ -70,8 +68,8 @@ class CreditService:
 
         # Update user
         user.credit_score = score_after
-        user.level = cls.calculate_level(score_after)
-        user.save(update_fields=['credit_score', 'level'])
+        user.community_level = cls.calculate_level(score_after)
+        user.save(update_fields=['credit_score', 'community_level'])
 
         # Create log
         CreditLog.objects.create(
@@ -112,8 +110,8 @@ class CreditService:
 
         # Update user
         user.credit_score = score_after
-        user.level = cls.calculate_level(score_after)
-        user.save(update_fields=['credit_score', 'level'])
+        user.community_level = cls.calculate_level(score_after)
+        user.save(update_fields=['credit_score', 'community_level'])
 
         # Create log
         CreditLog.objects.create(
@@ -149,8 +147,8 @@ class CreditService:
         score_after = max(0, score_before + amount)
 
         user.credit_score = score_after
-        user.level = cls.calculate_level(score_after)
-        user.save(update_fields=["credit_score", "level"])
+        user.community_level = cls.calculate_level(score_after)
+        user.save(update_fields=["credit_score", "community_level"])
 
         CreditLog.objects.create(
             user=user,
@@ -213,8 +211,8 @@ class CreditService:
         score_after = max(0, score_before + amount)
 
         user.credit_score = score_after
-        user.level = cls.calculate_level(score_after)
-        user.save(update_fields=['credit_score', 'level'])
+        user.community_level = cls.calculate_level(score_after)
+        user.save(update_fields=['credit_score', 'community_level'])
 
         CreditLog.objects.create(
             user=user,

@@ -1,9 +1,9 @@
 from django.db import models
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser
 
 
 class Notification(models.Model):
-    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    recipient = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="notifications")
     notification_type = models.CharField(max_length=50)
     title = models.CharField(max_length=200)
     content = models.TextField(blank=True)

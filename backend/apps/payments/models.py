@@ -1,5 +1,5 @@
 from django.db import models
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser
 
 
 class TransactionType(models.TextChoices):
@@ -16,7 +16,7 @@ class TransactionType(models.TextChoices):
 
 
 class Transaction(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="transactions")
+    user = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="transactions")
     transaction_type = models.CharField(max_length=30, choices=TransactionType.choices)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     balance_after = models.DecimalField(max_digits=10, decimal_places=2)

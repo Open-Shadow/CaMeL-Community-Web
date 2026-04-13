@@ -1,5 +1,5 @@
 from django.db import models
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser
 
 
 class BountyStatus(models.TextChoices):
@@ -31,7 +31,7 @@ class WorkloadEstimate(models.TextChoices):
 
 
 class Bounty(models.Model):
-    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounties")
+    creator = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="bounties")
     title = models.CharField(max_length=200)
     description = models.TextField()
     attachments = models.JSONField(default=list, blank=True)
@@ -57,7 +57,7 @@ class Bounty(models.Model):
 
 class BountyApplication(models.Model):
     bounty = models.ForeignKey(Bounty, on_delete=models.CASCADE, related_name="applications")
-    applicant = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounty_applications")
+    applicant = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="bounty_applications")
     proposal = models.TextField()
     estimated_days = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -69,7 +69,7 @@ class BountyApplication(models.Model):
 
 class BountyDeliverable(models.Model):
     bounty = models.ForeignKey(Bounty, on_delete=models.CASCADE, related_name="deliverables")
-    submitter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="deliverables")
+    submitter = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="deliverables")
     content = models.TextField()
     attachments = models.JSONField(default=list)
     revision_number = models.IntegerField(default=1)
@@ -81,7 +81,7 @@ class BountyDeliverable(models.Model):
 
 class BountyComment(models.Model):
     bounty = models.ForeignKey(Bounty, on_delete=models.CASCADE, related_name="comments")
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounty_comments")
+    author = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="bounty_comments")
     content = models.TextField(max_length=1000)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -93,7 +93,7 @@ class Arbitration(models.Model):
     bounty = models.OneToOneField(Bounty, on_delete=models.CASCADE, related_name="arbitration")
     creator_statement = models.TextField(blank=True)
     hunter_statement = models.TextField(blank=True)
-    arbitrators = models.ManyToManyField(User, related_name="arbitration_cases", blank=True)
+    arbitrators = models.ManyToManyField(CamelUser, related_name="arbitration_cases", blank=True)
     result = models.CharField(
         max_length=20,
         choices=[("HUNTER_WIN", "接单者胜"), ("CREATOR_WIN", "发布者胜"), ("PARTIAL", "部分完成")],
@@ -101,7 +101,7 @@ class Arbitration(models.Model):
     )
     hunter_ratio = models.DecimalField(max_digits=4, decimal_places=3, null=True, blank=True)
     appeal_by = models.ForeignKey(
-        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="appeals"
+        CamelUser, null=True, blank=True, on_delete=models.SET_NULL, related_name="appeals"
     )
     appeal_fee_paid = models.BooleanField(default=False)
     admin_final_result = models.CharField(max_length=20, blank=True)
@@ -115,7 +115,7 @@ class Arbitration(models.Model):
 
 class ArbitrationVote(models.Model):
     arbitration = models.ForeignKey(Arbitration, on_delete=models.CASCADE, related_name="votes")
-    arbitrator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="arbitration_votes")
+    arbitrator = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="arbitration_votes")
     vote = models.CharField(
         max_length=20,
         choices=[("HUNTER_WIN", "接单者胜"), ("CREATOR_WIN", "发布者胜"), ("PARTIAL", "部分完成")],
@@ -130,8 +130,8 @@ class ArbitrationVote(models.Model):
 
 class BountyReview(models.Model):
     bounty = models.ForeignKey(Bounty, on_delete=models.CASCADE, related_name="reviews")
-    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounty_reviews_written")
-    reviewee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bounty_reviews_received")
+    reviewer = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="bounty_reviews_written")
+    reviewee = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="bounty_reviews_received")
     quality_rating = models.IntegerField()
     communication_rating = models.IntegerField()
     responsiveness_rating = models.IntegerField()

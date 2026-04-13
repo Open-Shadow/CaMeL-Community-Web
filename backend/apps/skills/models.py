@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser
 
 
 class SkillStatus(models.TextChoices):
@@ -29,7 +29,7 @@ class PricingModel(models.TextChoices):
 
 
 class Skill(models.Model):
-    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skills")
+    creator = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="skills")
     name = models.CharField(max_length=80)
     slug = models.SlugField(max_length=100, unique=True)
     description = models.CharField(max_length=500)
@@ -80,7 +80,7 @@ class SkillVersion(models.Model):
 
 class SkillCall(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="calls")
-    caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_calls")
+    caller = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="skill_calls")
     skill_version = models.IntegerField()
     input_text = models.TextField()
     output_text = models.TextField(blank=True)
@@ -95,7 +95,7 @@ class SkillCall(models.Model):
 
 class SkillReview(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="reviews")
-    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_reviews")
+    reviewer = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="skill_reviews")
     rating = models.IntegerField()
     comment = models.TextField(blank=True)
     tags = ArrayField(models.CharField(max_length=30), default=list)
@@ -109,7 +109,7 @@ class SkillReview(models.Model):
 
 class SkillUsagePreference(models.Model):
     skill = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name="usage_preferences")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="skill_usage_preferences")
+    user = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="skill_usage_preferences")
     locked_version = models.IntegerField(null=True, blank=True)
     auto_follow_latest = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

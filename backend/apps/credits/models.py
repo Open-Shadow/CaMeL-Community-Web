@@ -1,5 +1,5 @@
 from django.db import models
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser
 
 
 class CreditAction(models.TextChoices):
@@ -18,7 +18,7 @@ class CreditAction(models.TextChoices):
 
 
 class CreditLog(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="credit_logs")
+    user = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="credit_logs")
     action = models.CharField(max_length=30, choices=CreditAction.choices)
     amount = models.IntegerField()
     score_before = models.IntegerField()

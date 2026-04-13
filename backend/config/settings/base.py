@@ -90,7 +90,13 @@ CACHES = {
     }
 }
 
-AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = 'accounts.CamelUser'
+
+PASSWORD_HASHERS = [
+    'common.hashers.GoBCryptPasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
 
 SITE_ID = 1
 

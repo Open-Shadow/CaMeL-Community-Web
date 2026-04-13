@@ -8,7 +8,7 @@ from django.test import Client
 from django.test.client import RequestFactory
 from django.test.utils import override_settings
 
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser as User
 from apps.accounts.services import AuthService
 from apps.credits.models import CreditAction, CreditLog
 

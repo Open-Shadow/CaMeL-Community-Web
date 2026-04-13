@@ -16,7 +16,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.db.models import Lookup
 from django.utils import timezone
 
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser as User
 from apps.notifications.models import Notification
 from apps.notifications.services import NotificationService
 from apps.search.services import SearchService

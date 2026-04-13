@@ -6,7 +6,7 @@ import pytest
 from django.test import Client
 from django.utils import timezone
 
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser as User
 from apps.accounts.services import AuthService
 
 

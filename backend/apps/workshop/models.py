@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
-from apps.accounts.models import User
+from apps.accounts.models import CamelUser
 from apps.skills.models import Skill
 
 
@@ -25,7 +25,7 @@ class ArticleType(models.TextChoices):
 
 
 class Series(models.Model):
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="series")
+    author = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="series")
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     cover_url = models.URLField(blank=True)
@@ -39,7 +39,7 @@ class Series(models.Model):
 
 
 class Article(models.Model):
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="articles")
+    author = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="articles")
     series = models.ForeignKey(Series, null=True, blank=True, on_delete=models.SET_NULL, related_name="articles")
     series_order = models.IntegerField(null=True, blank=True)
     related_skill = models.ForeignKey(Skill, null=True, blank=True, on_delete=models.SET_NULL, related_name="articles")
@@ -70,7 +70,7 @@ class Article(models.Model):
 
 class Comment(models.Model):
     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="comments")
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="comments")
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies")
     content = models.TextField(max_length=500)
     is_pinned = models.BooleanField(default=False)
@@ -84,7 +84,7 @@ class Comment(models.Model):
 
 class CommentVote(models.Model):
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name="votes")
-    voter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="comment_votes")
+    voter = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="comment_votes")
     value = models.SmallIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -95,7 +95,7 @@ class CommentVote(models.Model):
 
 class Vote(models.Model):
     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="votes")
-    voter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="votes")
+    voter = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="votes")
     is_upvote = models.BooleanField()
     weight = models.DecimalField(max_digits=4, decimal_places=2, default=1.0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -107,8 +107,8 @@ class Vote(models.Model):
 
 class Tip(models.Model):
     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="tips")
-    tipper = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tips_given")
-    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tips_received")
+    tipper = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="tips_given")
+    recipient = models.ForeignKey(CamelUser, on_delete=models.CASCADE, related_name="tips_received")
     amount = models.DecimalField(max_digits=8, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
 

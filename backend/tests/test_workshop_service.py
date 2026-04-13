@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from django.utils import timezone
 
-from apps.accounts.models import User, UserLevel
+from apps.accounts.models import CamelUser as User, UserLevel
 from apps.credits.models import CreditLog
 from apps.payments.models import Transaction
 from apps.workshop.models import (
