@@ -277,8 +277,16 @@ class SkillService:
             for field, value in payload.items()
         )
 
-        for field, value in payload.items():
-            setattr(skill, field, value)
+        # For approved skills uploading a new package, defer metadata changes
+        # until the new version is approved — applying them now would bypass
+        # the review workflow by making unreviewed changes immediately public.
+        # We still compute content_changed above so the REJECTED→DRAFT reset
+        # at the bottom works correctly for non-approved skills.
+        defer_metadata = has_new_package and skill.status == SkillStatus.APPROVED
+
+        if not defer_metadata:
+            for field, value in payload.items():
+                setattr(skill, field, value)
 
         if has_new_package:
             new_version = data.get("version")

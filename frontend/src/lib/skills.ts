@@ -1,4 +1,5 @@
 import { api } from '@/hooks/use-auth'
+import { API_ORIGIN } from '@/lib/env'
 
 export interface SkillSummary {
   id: number
@@ -307,7 +308,10 @@ export async function downloadSkill(skillId: number, version?: string) {
   try {
     const response = await api.get<{ url: string }>(`/skills/${skillId}/download`, { params })
     if (win && response.data.url) {
-      win.location.href = response.data.url
+      const url = response.data.url.startsWith('/')
+        ? `${API_ORIGIN}${response.data.url}`
+        : response.data.url
+      win.location.href = url
     }
   } catch (e) {
     if (win) win.close()
