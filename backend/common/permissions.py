@@ -38,19 +38,19 @@ class OptionalAuthBearer(HttpBearer):
             data = AccessToken(token)
             user = User.objects.get(id=data['user_id'])
             if not user.is_active:
-                return _ANONYMOUS
+                return None  # 401 — known but inactive user
             return user
         except (TokenError, User.DoesNotExist):
-            return _ANONYMOUS
+            return None  # 401 — invalid/expired token triggers frontend refresh
 
     def __call__(self, request):
         headers = request.headers
         auth_value = headers.get("Authorization", "")
         if not auth_value:
-            return _ANONYMOUS
+            return _ANONYMOUS  # No token at all → anonymous access
         parts = auth_value.split(" ")
         if len(parts) != 2 or parts[0].lower() != "bearer":
-            return _ANONYMOUS
+            return _ANONYMOUS  # Malformed header without bearer → treat as anonymous
         return self.authenticate(request, parts[1])
 
 

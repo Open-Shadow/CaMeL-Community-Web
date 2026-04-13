@@ -3,6 +3,30 @@
 from django.db import migrations, models
 
 
+def backfill_semver(apps, schema_editor):
+    """Convert legacy integer current_version values to proper SemVer.
+
+    Old rows have values like "1", "2", etc. (cast from the old IntegerField).
+    New code expects valid SemVer strings like "1.0.0".
+    """
+    Skill = apps.get_model("skills", "Skill")
+    for skill in Skill.objects.all():
+        v = skill.current_version
+        # Already valid SemVer (contains at least two dots) — skip
+        if v and "." in v and v.count(".") >= 2:
+            continue
+        # Try to interpret as a bare integer or partial version
+        try:
+            parts = v.split(".") if v else ["1"]
+            major = int(parts[0]) if parts[0] else 1
+            minor = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+            patch = int(parts[2]) if len(parts) > 2 and parts[2] else 0
+            skill.current_version = f"{major}.{minor}.{patch}"
+        except (ValueError, IndexError):
+            skill.current_version = "1.0.0"
+        skill.save(update_fields=["current_version"])
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -15,4 +39,5 @@ class Migration(migrations.Migration):
             name='current_version',
             field=models.CharField(default='1.0.0', max_length=20),
         ),
+        migrations.RunPython(backfill_semver, migrations.RunPython.noop),
     ]

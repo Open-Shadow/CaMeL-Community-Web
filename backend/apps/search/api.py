@@ -17,7 +17,7 @@ class SearchSkillOut(Schema):
     price: float | None = None
     status: str
     is_featured: bool
-    current_version: int
+    current_version: str
     rejection_reason: str
     readme_html: str
     download_count: int
