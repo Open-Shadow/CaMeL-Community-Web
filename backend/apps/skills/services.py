@@ -619,13 +619,15 @@ class SkillService:
     def resolve_package_file(skill: Skill, version: str | None = None):
         """Resolve the downloadable package file for a skill.
 
-        Blocks archived/quarantined skills. Resolves through an APPROVED
-        SkillVersion — never falls back to skill.package_file blindly.
+        Blocks rejected skills. Archived skills remain downloadable for
+        existing purchasers (access control is handled by the caller).
+        Resolves through an APPROVED SkillVersion — never falls back to
+        skill.package_file blindly.
 
         Returns the file field of the resolved version.
         Raises ValueError on any access violation.
         """
-        if skill.status in (SkillStatus.ARCHIVED, SkillStatus.REJECTED):
+        if skill.status == SkillStatus.REJECTED:
             raise ValueError("该 Skill 当前不可访问")
 
         if version:

@@ -179,11 +179,12 @@ class TestResolvePackageFile:
         assert result is not None
 
     @pytest.mark.django_db
-    def test_archived_skill_blocked(self, approved_skill):
+    def test_archived_skill_still_downloadable(self, approved_skill):
+        """Archived skills remain downloadable for entitled users."""
         approved_skill.status = SkillStatus.ARCHIVED
         approved_skill.save()
-        with pytest.raises(ValueError, match="不可访问"):
-            SkillService.resolve_package_file(approved_skill)
+        result = SkillService.resolve_package_file(approved_skill)
+        assert result is not None
 
     @pytest.mark.django_db
     def test_rejected_skill_blocked(self, approved_skill):
@@ -641,15 +642,15 @@ class TestHTTPSkillDownload:
         assert resp.status_code == 403
 
     @pytest.mark.django_db
-    def test_download_archived_skill_rejected(self, client, buyer, approved_skill):
-        """GET /api/skills/{id}/download for archived skill returns 404."""
+    def test_download_archived_skill_allowed_for_entitled(self, client, buyer, approved_skill):
+        """GET /api/skills/{id}/download for archived free skill succeeds for entitled users."""
         approved_skill.status = SkillStatus.ARCHIVED
         approved_skill.save()
         resp = client.get(
             f"/api/skills/{approved_skill.id}/download",
             **_jwt_header(buyer),
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 200
 
 
 class TestHTTPFileTree:
