@@ -87,12 +87,30 @@ class PackageService:
         return version
 
     @staticmethod
-    def parse_semver_tuple(version: str) -> tuple[int, int, int]:
-        """Parse a SemVer string into (major, minor, patch) for comparison."""
+    def parse_semver_tuple(version: str) -> tuple:
+        """Parse a SemVer string into a comparable tuple.
+
+        Returns (major, minor, patch, is_release, pre_parts) where:
+        - is_release is 1 for release versions, 0 for prerelease
+        - pre_parts is a tuple of prerelease identifiers for ordering
+        Per SemVer spec, prereleases have lower precedence than releases
+        with the same major.minor.patch.
+        """
         m = SEMVER_RE.match(version)
         if not m:
             raise ValueError(f"版本号 '{version}' 不是有效的 SemVer 格式")
-        return int(m.group("major")), int(m.group("minor")), int(m.group("patch"))
+        major, minor, patch = int(m.group("major")), int(m.group("minor")), int(m.group("patch"))
+        pre = m.group("pre")
+        if pre:
+            # Prerelease identifiers: numeric parts compared as ints, others as strings
+            pre_parts = []
+            for part in pre.split("."):
+                if part.isdigit():
+                    pre_parts.append((0, int(part)))
+                else:
+                    pre_parts.append((1, part))
+            return (major, minor, patch, 0, tuple(pre_parts))
+        return (major, minor, patch, 1, ())
 
     @classmethod
     def _validate_zip_safety(cls, zf: zipfile.ZipFile):

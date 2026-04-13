@@ -143,12 +143,19 @@ class TestSemVerValidation:
             PackageService.validate_semver("")
 
     def test_parse_semver_tuple(self):
-        assert PackageService.parse_semver_tuple("1.2.3") == (1, 2, 3)
-        assert PackageService.parse_semver_tuple("0.0.1") == (0, 0, 1)
-        assert PackageService.parse_semver_tuple("10.20.30") == (10, 20, 30)
+        assert PackageService.parse_semver_tuple("1.2.3") == (1, 2, 3, 1, ())
+        assert PackageService.parse_semver_tuple("0.0.1") == (0, 0, 1, 1, ())
+        assert PackageService.parse_semver_tuple("10.20.30") == (10, 20, 30, 1, ())
 
     def test_parse_semver_tuple_with_prerelease(self):
-        assert PackageService.parse_semver_tuple("1.0.0-alpha") == (1, 0, 0)
+        result = PackageService.parse_semver_tuple("1.0.0-alpha")
+        assert result == (1, 0, 0, 0, ((1, "alpha"),))
+
+    def test_parse_semver_tuple_prerelease_less_than_release(self):
+        """SemVer spec: 1.0.0-alpha < 1.0.0"""
+        pre = PackageService.parse_semver_tuple("1.0.0-beta.1")
+        rel = PackageService.parse_semver_tuple("1.0.0")
+        assert pre < rel
 
     def test_parse_semver_tuple_invalid(self):
         with pytest.raises(ValueError, match="SemVer"):
@@ -217,4 +224,74 @@ class TestModerationService:
         })
         assert passed is False
         assert any("危险" in i for i in issues)
+
+
+class TestSemVerPrecedence:
+    """Tests for SemVer precedence ordering per spec."""
+
+    def test_prerelease_less_than_release(self):
+        """1.0.0-alpha < 1.0.0"""
+        pre = PackageService.parse_semver_tuple("1.0.0-alpha")
+        rel = PackageService.parse_semver_tuple("1.0.0")
+        assert pre < rel
+
+    def test_prerelease_beta_less_than_release(self):
+        """1.0.0-beta.1 < 1.0.0"""
+        pre = PackageService.parse_semver_tuple("1.0.0-beta.1")
+        rel = PackageService.parse_semver_tuple("1.0.0")
+        assert pre < rel
+
+    def test_prerelease_ordering(self):
+        """1.0.0-alpha < 1.0.0-beta"""
+        alpha = PackageService.parse_semver_tuple("1.0.0-alpha")
+        beta = PackageService.parse_semver_tuple("1.0.0-beta")
+        assert alpha < beta
+
+    def test_numeric_prerelease_ordering(self):
+        """1.0.0-beta.1 < 1.0.0-beta.2"""
+        b1 = PackageService.parse_semver_tuple("1.0.0-beta.1")
+        b2 = PackageService.parse_semver_tuple("1.0.0-beta.2")
+        assert b1 < b2
+
+    def test_release_ordering(self):
+        """1.0.0 < 1.0.1 < 1.1.0 < 2.0.0"""
+        v100 = PackageService.parse_semver_tuple("1.0.0")
+        v101 = PackageService.parse_semver_tuple("1.0.1")
+        v110 = PackageService.parse_semver_tuple("1.1.0")
+        v200 = PackageService.parse_semver_tuple("2.0.0")
+        assert v100 < v101 < v110 < v200
+
+    def test_prerelease_to_release_promotion_valid(self):
+        """Uploading 1.0.0 after 1.0.0-beta.1 should be allowed (strictly greater)."""
+        pre = PackageService.parse_semver_tuple("1.0.0-beta.1")
+        rel = PackageService.parse_semver_tuple("1.0.0")
+        assert rel > pre
+
+
+class TestScanPipelineMetadata:
+    """Tests for scan pipeline metadata failure handling."""
+
+    def test_invalid_semver_in_scan_is_hard_failure(self):
+        """process_upload raises ValueError for bad SemVer; scan should treat as FAIL."""
+        bad_md = """---
+name: Test
+description: Test
+version: "1.0"
+---
+# Test
+"""
+        f = _make_zip({"SKILL.md": bad_md})
+        with pytest.raises(ValueError, match="SemVer"):
+            PackageService.process_upload(f)
+
+    def test_missing_frontmatter_field_is_hard_failure(self):
+        """Missing required frontmatter field should be ValueError (FAIL in pipeline)."""
+        bad_md = """---
+name: Test
+---
+# Test
+"""
+        f = _make_zip({"SKILL.md": bad_md})
+        with pytest.raises(ValueError, match="缺少必填字段"):
+            PackageService.process_upload(f)
 

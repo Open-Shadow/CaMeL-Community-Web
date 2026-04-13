@@ -284,22 +284,23 @@ class SkillService:
             if not new_version:
                 raise ValueError("新版本文件包必须包含版本号")
 
-            # Enforce monotonic version progression
+            # Enforce monotonic version progression against latest approved
             from apps.skills.package_service import PackageService
             new_tuple = PackageService.parse_semver_tuple(new_version)
-            existing_versions = list(
-                skill.versions.values_list("version", flat=True)
-            )
-            for ev in existing_versions:
+            latest_approved = skill.versions.filter(
+                status=VersionStatus.APPROVED,
+            ).order_by("-created_at").first()
+            if latest_approved:
                 try:
-                    if PackageService.parse_semver_tuple(ev) >= new_tuple:
+                    latest_tuple = PackageService.parse_semver_tuple(latest_approved.version)
+                    if new_tuple <= latest_tuple:
                         raise ValueError(
-                            f"新版本 {new_version} 必须大于已有版本 {ev}"
+                            f"新版本 {new_version} 必须大于最新已审核版本 {latest_approved.version}"
                         )
                 except ValueError as e:
                     if "必须大于" in str(e):
                         raise
-                    # Skip unparseable old versions
+                    # Skip unparseable old version
 
             new_sv = SkillVersion.objects.create(
                 skill=skill,
@@ -514,6 +515,38 @@ class SkillService:
         return skill
 
     @staticmethod
+    def resolve_package_file(skill: Skill, version: str | None = None):
+        """Resolve the downloadable package file for a skill.
+
+        Blocks archived/quarantined skills. Resolves through an APPROVED
+        SkillVersion — never falls back to skill.package_file blindly.
+
+        Returns the file field of the resolved version.
+        Raises ValueError on any access violation.
+        """
+        if skill.status in (SkillStatus.ARCHIVED, SkillStatus.REJECTED):
+            raise ValueError("该 Skill 当前不可访问")
+
+        if version:
+            version_obj = skill.versions.filter(
+                version=version, status=VersionStatus.APPROVED,
+            ).first()
+            if not version_obj:
+                raise ValueError("指定版本不存在或未通过审核")
+        else:
+            version_obj = skill.versions.filter(
+                status=VersionStatus.APPROVED,
+            ).order_by("-created_at").first()
+
+        if not version_obj:
+            raise ValueError("没有可用的已审核版本")
+
+        if not version_obj.package_file:
+            raise ValueError("指定版本文件包不存在")
+
+        return version_obj.package_file
+
+    @staticmethod
     def _promote_version(skill: Skill, version_obj) -> None:
         """Promote an approved version to be the live Skill pointers."""
         if not version_obj:
@@ -578,11 +611,32 @@ class SkillService:
     @staticmethod
     @transaction.atomic
     def admin_reject(skill: Skill, reason: str = "") -> Skill:
-        """Admin rejects a skill."""
+        """Admin rejects a skill or a pending version of an already-approved skill."""
         if skill.status not in (SkillStatus.SCANNING, SkillStatus.APPROVED):
             raise ValueError("当前 Skill 无法被拒绝")
 
         review_reason = reason.strip() or "未通过人工审核，请根据规范调整后重新提交。"
+
+        if skill.status == SkillStatus.APPROVED:
+            # Version-scoped rejection: reject only the pending version,
+            # keep the skill APPROVED and the live version intact.
+            pending = skill.versions.filter(
+                status=VersionStatus.SCANNING,
+            ).order_by("-created_at").first()
+            if not pending:
+                raise ValueError("没有待审核的新版本")
+            pending.status = VersionStatus.REJECTED
+            pending.save(update_fields=["status"])
+            NotificationService.send(
+                recipient=skill.creator,
+                notification_type="skill_reviewed",
+                title="新版本审核未通过",
+                content=f"「{skill.name}」v{pending.version} 未通过审核：{review_reason}",
+                reference_id=str(skill.id),
+            )
+            return skill
+
+        # New skill rejection (SCANNING → REJECTED)
         skill.status = SkillStatus.REJECTED
         skill.rejection_reason = review_reason
         skill.save(update_fields=["status", "rejection_reason", "updated_at"])

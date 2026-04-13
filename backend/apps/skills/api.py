@@ -255,27 +255,13 @@ def download_skill(request, skill_id: int, version: Optional[str] = None):
     if not SkillPurchaseService.has_access(skill, request.auth):
         raise HttpError(403, "请先购买该 Skill")
 
-    if not skill.package_file:
-        raise HttpError(404, "Skill 文件包不存在")
-
-    # Resolve to a specific APPROVED version
-    from apps.skills.models import VersionStatus
-    if version:
-        version_obj = skill.versions.filter(version=version, status=VersionStatus.APPROVED).first()
-        if not version_obj:
-            raise HttpError(404, "指定版本不存在或未通过审核")
-    else:
-        version_obj = skill.versions.filter(status=VersionStatus.APPROVED).order_by("-created_at").first()
-
-    if version_obj and version_obj.status == VersionStatus.ARCHIVED:
-        raise HttpError(403, "该版本已因安全原因被封禁，无法下载")
+    try:
+        package_file = SkillService.resolve_package_file(skill, version)
+    except ValueError as e:
+        raise HttpError(404, str(e))
 
     from apps.skills.package_service import PackageService
-    file_to_download = version_obj.package_file if version_obj else skill.package_file
-    if not file_to_download:
-        raise HttpError(404, "指定版本文件包不存在")
-
-    url = PackageService.generate_download_url(file_to_download.name)
+    url = PackageService.generate_download_url(package_file.name)
 
     skill.download_count += 1
     skill.save(update_fields=["download_count"])
@@ -358,21 +344,24 @@ def get_file_tree(request, skill_id: int):
     """Return the file listing from a skill's package ZIP.
 
     Only available to purchasers, owners, or users of free skills.
+    Resolves through the latest approved version — blocks archived skills.
     """
     skill = get_object_or_404(Skill.objects.select_related("creator"), id=skill_id)
 
     if not SkillPurchaseService.has_access(skill, request.auth):
         raise HttpError(403, "请先购买该 Skill 后查看文件列表")
 
-    if not skill.package_file:
-        raise HttpError(404, "Skill 文件包不存在")
+    try:
+        package_file = SkillService.resolve_package_file(skill)
+    except ValueError as e:
+        raise HttpError(404, str(e))
 
     import zipfile
     from io import BytesIO
 
     try:
-        content = skill.package_file.read()
-        skill.package_file.seek(0)
+        content = package_file.read()
+        package_file.seek(0)
         entries = []
         with zipfile.ZipFile(BytesIO(content)) as zf:
             for info in zf.infolist():

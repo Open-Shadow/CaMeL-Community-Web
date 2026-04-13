@@ -61,8 +61,9 @@ def run_skill_scan(skill_id: int):
     # Run content scan
     passed, issues = ModerationService.auto_review(file_contents)
 
-    # Metadata and version checks (generate warnings, not hard failures)
+    # Metadata and version checks
     warnings = []
+    metadata_failed = False
     try:
         scan_file.seek(0)
         pkg_data = PackageService.process_upload(scan_file)
@@ -77,11 +78,15 @@ def run_skill_scan(skill_id: int):
             warnings.append("SKILL.md frontmatter 缺少 name 字段")
         if not pkg_data.get("description"):
             warnings.append("SKILL.md frontmatter 缺少 description 字段")
-    except ValueError:
+    except ValueError as e:
         # SemVer or other validation errors from process_upload are hard failures
-        warnings.append("SKILL.md 元数据校验产生警告")
+        metadata_failed = True
+        issues.append(f"元数据校验失败：{e}")
     except Exception:
         warnings.append("元数据提取失败，请检查 SKILL.md 格式")
+
+    if metadata_failed:
+        passed = False
 
     SkillService.complete_scan(
         skill, passed=passed, issues=issues, warnings=warnings if warnings else None,

@@ -8,6 +8,7 @@ import { TagInput } from '@/components/shared/tag-input'
 import { createSkill, submitSkill } from '@/lib/skills'
 import { useAuth } from '@/hooks/use-auth'
 import { unzipSync, strFromU8 } from 'fflate'
+import jsYaml from 'js-yaml'
 
 const CATEGORIES = [
   { value: 'CODE_DEV', label: '代码开发' },
@@ -43,20 +44,36 @@ export default function CreateSkillPage() {
   const [skillMdPreview, setSkillMdPreview] = useState<{ frontmatter: Record<string, unknown>; body: string } | null>(null)
   const [previewExpanded, setPreviewExpanded] = useState(true)
 
-  /** Parse SKILL.md from a ZIP file and extract frontmatter + body. */
+  /** Parse SKILL.md from a ZIP file and extract frontmatter + body.
+   *  Matches backend _find_skill_md: root or single top-level directory only. */
   const parseSkillMd = useCallback(async (file: File) => {
     try {
       const buffer = await file.arrayBuffer()
       const unzipped = unzipSync(new Uint8Array(buffer))
 
-      // Find SKILL.md — at root or in a single top-level directory
+      // Find SKILL.md — at root or in a single top-level directory (backend rules)
       let skillMdContent: string | null = null
       const paths = Object.keys(unzipped)
-      const directMatch = paths.find(
-        (p) => p === 'SKILL.md' || p.endsWith('/SKILL.md'),
-      )
-      if (directMatch) {
-        skillMdContent = strFromU8(unzipped[directMatch])
+
+      // 1. Check root
+      if (paths.includes('SKILL.md')) {
+        skillMdContent = strFromU8(unzipped['SKILL.md'])
+      } else {
+        // 2. Check single top-level directory
+        const topDirs = new Set<string>()
+        for (const p of paths) {
+          const firstSlash = p.indexOf('/')
+          if (firstSlash > 0) {
+            topDirs.add(p.substring(0, firstSlash))
+          }
+        }
+        if (topDirs.size === 1) {
+          const dir = [...topDirs][0]
+          const nested = `${dir}/SKILL.md`
+          if (paths.includes(nested)) {
+            skillMdContent = strFromU8(unzipped[nested])
+          }
+        }
       }
 
       if (!skillMdContent) {
@@ -64,7 +81,7 @@ export default function CreateSkillPage() {
         return
       }
 
-      // Parse YAML frontmatter
+      // Parse YAML frontmatter using js-yaml (matches backend yaml.safe_load)
       if (!skillMdContent.startsWith('---')) {
         setSkillMdPreview({ frontmatter: {}, body: skillMdContent })
         return
@@ -76,24 +93,14 @@ export default function CreateSkillPage() {
         return
       }
 
-      // Simple YAML parser for frontmatter (key: value pairs)
-      const yamlBlock = parts[1]
-      const frontmatter: Record<string, unknown> = {}
-      for (const line of yamlBlock.split('\n')) {
-        const match = line.match(/^(\w+)\s*:\s*(.+)$/)
-        if (match) {
-          const value = match[2].trim()
-          // Handle arrays like [tag1, tag2]
-          if (value.startsWith('[') && value.endsWith(']')) {
-            frontmatter[match[1]] = value
-              .slice(1, -1)
-              .split(',')
-              .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
-              .filter(Boolean)
-          } else {
-            frontmatter[match[1]] = value.replace(/^['"]|['"]$/g, '')
-          }
+      let frontmatter: Record<string, unknown> = {}
+      try {
+        const parsed = jsYaml.load(parts[1])
+        if (parsed && typeof parsed === 'object') {
+          frontmatter = parsed as Record<string, unknown>
         }
+      } catch {
+        // YAML parse error — show body only
       }
 
       const body = parts.slice(2).join('---').trim()
