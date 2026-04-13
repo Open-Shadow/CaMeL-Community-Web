@@ -309,6 +309,13 @@ class SkillService:
                     f"版本 {new_version} 已存在，请使用更高的版本号"
                 )
 
+            # Supersede any existing SCANNING versions for approved skills
+            # to enforce a single pending version lifecycle.
+            if skill.status == SkillStatus.APPROVED:
+                skill.versions.filter(
+                    status=VersionStatus.SCANNING,
+                ).update(status=VersionStatus.REJECTED)
+
             new_sv = SkillVersion.objects.create(
                 skill=skill,
                 version=new_version,
@@ -589,6 +596,21 @@ class SkillService:
             ).order_by("-created_at").first()
             if not pending:
                 raise ValueError("没有待审核的新版本")
+
+            # Guard against SemVer rollback: pending version must be > current live
+            from apps.skills.package_service import PackageService
+            try:
+                pending_tuple = PackageService.parse_semver_tuple(pending.version)
+                live_tuple = PackageService.parse_semver_tuple(skill.current_version)
+                if pending_tuple <= live_tuple:
+                    raise ValueError(
+                        f"待审核版本 {pending.version} 不高于当前版本 {skill.current_version}，无法上架"
+                    )
+            except ValueError as e:
+                if "不高于" in str(e) or "无法上架" in str(e):
+                    raise
+                # Skip comparison if either version string is unparseable
+
             pending.status = VersionStatus.APPROVED
             pending.save(update_fields=["status"])
             cls._promote_version(skill, pending)
@@ -1134,6 +1156,7 @@ class SkillReportService:
             if total_reports >= REPORT_QUARANTINE_THRESHOLD and skill.status == SkillStatus.APPROVED:
                 # Version-scoped quarantine: archive only the current live version,
                 # keep older safe approved versions accessible to entitled users.
+                quarantined_version_str = skill.current_version
                 current_version = skill.versions.filter(
                     version=skill.current_version,
                     status=VersionStatus.APPROVED,
@@ -1159,7 +1182,7 @@ class SkillReportService:
                     recipient=skill.creator,
                     notification_type="skill_reported",
                     title="Skill 版本已被隔离",
-                    content=f"「{skill.name}」v{skill.current_version} 因多次举报已被隔离，等待管理员审核。",
+                    content=f"「{skill.name}」v{quarantined_version_str} 因多次举报已被隔离，等待管理员审核。",
                     reference_id=str(skill.id),
                 )
 
