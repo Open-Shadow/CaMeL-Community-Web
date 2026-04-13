@@ -94,6 +94,9 @@ class SkillVersion(models.Model):
         max_length=10, choices=ScanResult.choices, blank=True, default="",
     )
     scan_warnings = models.JSONField(default=list, blank=True)
+    # Metadata changes submitted alongside this version for approved skills;
+    # applied to the parent Skill when this version is promoted.
+    pending_metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

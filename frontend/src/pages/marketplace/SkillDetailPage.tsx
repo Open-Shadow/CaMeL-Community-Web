@@ -134,7 +134,7 @@ export default function SkillDetailPage() {
 
   const isOwner = Boolean(isAuthenticated && user && user.id === skill.creator_id)
   const hasApprovedVersion = (skill.status === 'APPROVED' || skill.status === 'ARCHIVED') && (skill.has_package !== false)
-  const canDownload = hasApprovedVersion && (skill.pricing_model === 'FREE' || skill.has_purchased || isOwner)
+  const canDownload = isAuthenticated && hasApprovedVersion && (skill.pricing_model === 'FREE' || skill.has_purchased || isOwner)
 
   const handlePurchase = async () => {
     setPurchasing(true)

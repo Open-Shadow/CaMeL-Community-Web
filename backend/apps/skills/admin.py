@@ -129,8 +129,12 @@ class SkillReportAdmin(admin.ModelAdmin):
         from apps.skills.models import VersionStatus, SkillReport
         from common.constants import REPORT_QUARANTINE_THRESHOLD
 
-        # Collect affected skill IDs before deleting
+        # Collect affected skill IDs and pre-delete report counts before deleting
         affected_skills = set(queryset.values_list("skill_id", flat=True))
+        pre_counts = {
+            skill_id: SkillReport.objects.filter(skill_id=skill_id).count()
+            for skill_id in affected_skills
+        }
         # Delete first so threshold checks see post-delete state
         deleted, _ = queryset.delete()
         reinstated = 0
@@ -138,16 +142,18 @@ class SkillReportAdmin(admin.ModelAdmin):
             skill = Skill.objects.get(id=skill_id)
             remaining = SkillReport.objects.filter(skill=skill).count()
             if remaining < REPORT_QUARANTINE_THRESHOLD:
-                # Case 1: full quarantine — skill itself is ARCHIVED
-                # Case 2: fallback quarantine — skill is APPROVED but the
-                #   quarantined version is ARCHIVED (older approved was promoted)
-                # In both cases reinstate_quarantined() knows what to do.
-                # Manual admin bans on versions are a separate action and are
-                # not undone here because they don't generate SkillReport rows.
-                has_archived_version = skill.versions.filter(
-                    status=VersionStatus.ARCHIVED,
-                ).exists()
-                if skill.status == "ARCHIVED" or has_archived_version:
+                # Full quarantine: skill itself is ARCHIVED — always reinstate
+                if skill.status == "ARCHIVED":
+                    SkillService.reinstate_quarantined(skill)
+                    reinstated += 1
+                # Fallback quarantine: skill is APPROVED but has an ARCHIVED version.
+                # Only reinstate if the skill had enough reports to trigger quarantine
+                # before this dismissal — otherwise the archived version is a manual
+                # admin ban that should not be undone by report dismissal.
+                elif (
+                    pre_counts.get(skill_id, 0) >= REPORT_QUARANTINE_THRESHOLD
+                    and skill.versions.filter(status=VersionStatus.ARCHIVED).exists()
+                ):
                     SkillService.reinstate_quarantined(skill)
                     reinstated += 1
         self.message_user(request, f"已驳回 {deleted} 条举报，解除隔离 {reinstated} 个 Skill")

@@ -337,6 +337,9 @@ class SkillService:
                 # explicitly calls /submit. For non-approved skills, use SCANNING
                 # since they go through the normal submission flow.
                 status=VersionStatus.REJECTED if skill.status == SkillStatus.APPROVED else VersionStatus.SCANNING,
+                # Store deferred metadata so _promote_version can apply it when
+                # this version is approved (approved skills only).
+                pending_metadata=payload if defer_metadata else {},
             )
 
             if skill.status != SkillStatus.APPROVED:
@@ -684,6 +687,9 @@ class SkillService:
         except OSError:
             skill.package_size = 0
         skill.current_version = version_obj.version
+        # Apply any metadata changes that were deferred at upload time
+        for field, value in (version_obj.pending_metadata or {}).items():
+            setattr(skill, field, value)
         # Re-render readme from the new package if possible
         try:
             from apps.skills.package_service import PackageService
