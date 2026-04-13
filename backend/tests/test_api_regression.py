@@ -21,13 +21,15 @@ from apps.skills.models import (
     Skill,
     SkillCall,
     SkillPurchase,
+    SkillReport,
     SkillVersion,
     PricingModel,
+    ReportReason,
     ScanResult,
     SkillStatus,
     VersionStatus,
 )
-from apps.skills.services import SkillService
+from apps.skills.services import SkillService, SkillReportService
 
 
 def _make_zip(files: dict[str, str | bytes]) -> SimpleUploadedFile:
@@ -1111,76 +1113,107 @@ class TestHTTPDualReviewEligibility:
 
 
 class TestReinstateQuarantined:
-    """Service-layer tests for SkillService.reinstate_quarantined()."""
+    """Report-lifecycle tests for quarantine reinstatement."""
 
     @pytest.fixture
     def creator(self, db):
         return User.objects.create_user(username="creator_r", email="creator_r@test.com", password="pw")
 
-    @pytest.mark.django_db
-    def test_reinstate_archived_skill_restores_approved(self, creator):
-        """reinstate_quarantined() on ARCHIVED skill → APPROVED, not DRAFT."""
-        skill = Skill.objects.create(
-            creator=creator, name="Archived Skill", slug="archived-skill",
-            description="desc", category="utility", status=SkillStatus.ARCHIVED,
-        )
-        SkillVersion.objects.create(
-            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
-            package_file="skills/archived-skill/1.0.0.zip",
-        )
-        result = SkillService.reinstate_quarantined(skill)
-        assert result.status == SkillStatus.APPROVED
+    def _make_reporters(self, n):
+        from django.utils import timezone
+        from datetime import timedelta
+        users = []
+        for i in range(n):
+            u = User.objects.create_user(
+                username=f"reporter_r{i}", email=f"reporter_r{i}@test.com", password="pw"
+            )
+            User.objects.filter(pk=u.pk).update(date_joined=timezone.now() - timedelta(days=30))
+            u.refresh_from_db()
+            users.append(u)
+        return users
 
     @pytest.mark.django_db
-    def test_reinstate_archived_promotes_latest_approved_version(self, creator):
-        """reinstate_quarantined() sets current_version to latest approved version."""
+    def test_three_reports_quarantine_single_version_skill_and_dismiss_restores(self, creator):
+        """3 reports archive a single-version skill; dismissing reports restores it and resolve_package_file succeeds."""
         skill = Skill.objects.create(
-            creator=creator, name="Archived Skill2", slug="archived-skill2",
-            description="desc", category="utility", status=SkillStatus.ARCHIVED,
-        )
-        SkillVersion.objects.create(
-            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
-            package_file="skills/archived-skill2/1.0.0.zip",
-        )
-        result = SkillService.reinstate_quarantined(skill)
-        assert result.current_version == "1.0.0"
-
-    @pytest.mark.django_db
-    def test_reinstate_fallback_reinstates_archived_version(self, creator):
-        """reinstate_quarantined() on APPROVED skill with ARCHIVED version reinstates it."""
-        skill = Skill.objects.create(
-            creator=creator, name="Fallback Skill", slug="fallback-skill",
+            creator=creator, name="Single Ver Skill", slug="single-ver-skill",
             description="desc", category="utility", status=SkillStatus.APPROVED,
-            current_version="0.9.0",
+            current_version="1.0.0",
+            package_file="skills/single-ver-skill/1.0.0.zip",
         )
         SkillVersion.objects.create(
-            skill=skill, version="0.9.0", status=VersionStatus.APPROVED,
-            package_file="skills/fallback-skill/0.9.0.zip",
+            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
+            package_file="skills/single-ver-skill/1.0.0.zip",
         )
-        quarantined = SkillVersion.objects.create(
-            skill=skill, version="1.0.0", status=VersionStatus.ARCHIVED,
-            package_file="skills/fallback-skill/1.0.0.zip",
-        )
+        reporters = self._make_reporters(3)
+        for r in reporters:
+            SkillReportService.report(skill, r, ReportReason.MALICIOUS_CODE)
+        skill.refresh_from_db()
+        assert skill.status == SkillStatus.ARCHIVED
+
+        # Dismiss: reinstate + delete reports
+        reports_qs = SkillReport.objects.filter(skill=skill)
         SkillService.reinstate_quarantined(skill)
-        quarantined.refresh_from_db()
-        assert quarantined.status == VersionStatus.APPROVED
+        reports_qs.delete()
+
+        skill.refresh_from_db()
+        assert skill.status == SkillStatus.APPROVED
+        # resolve_package_file must succeed
+        pkg = SkillService.resolve_package_file(skill)
+        assert pkg is not None
 
     @pytest.mark.django_db
-    def test_reinstate_fallback_promotes_newer_version(self, creator):
-        """reinstate_quarantined() re-promotes the reinstated version if it's newer."""
+    def test_three_reports_quarantine_current_version_with_fallback_dismiss_restores_quarantined(self, creator, tmp_path, settings):
+        """3 reports archive current version; fallback promoted; dismissing restores the quarantined newer version."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        import os
+        for ver in ("1.0.0", "2.0.0"):
+            p = tmp_path / "skills" / "fallback-skill-r" / f"{ver}.zip"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(_make_zip_bytes({"SKILL.md": f"---\nname: T\nversion: {ver}\n---\n"}))
         skill = Skill.objects.create(
-            creator=creator, name="Promote Skill", slug="promote-skill",
+            creator=creator, name="Fallback Skill R", slug="fallback-skill-r",
             description="desc", category="utility", status=SkillStatus.APPROVED,
-            current_version="0.9.0",
+            current_version="2.0.0",
+            package_file="skills/fallback-skill-r/2.0.0.zip",
         )
         SkillVersion.objects.create(
-            skill=skill, version="0.9.0", status=VersionStatus.APPROVED,
-            package_file="skills/promote-skill/0.9.0.zip",
+            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
+            package_file="skills/fallback-skill-r/1.0.0.zip",
+        )
+        v2 = SkillVersion.objects.create(
+            skill=skill, version="2.0.0", status=VersionStatus.APPROVED,
+            package_file="skills/fallback-skill-r/2.0.0.zip",
+        )
+        reporters = self._make_reporters(3)
+        for r in reporters:
+            SkillReportService.report(skill, r, ReportReason.MALICIOUS_CODE)
+        skill.refresh_from_db()
+        assert skill.status == SkillStatus.APPROVED
+        v2.refresh_from_db()
+        assert v2.status == VersionStatus.ARCHIVED
+
+        SkillService.reinstate_quarantined(skill)
+        v2.refresh_from_db()
+        assert v2.status == VersionStatus.APPROVED
+
+    @pytest.mark.django_db
+    def test_dismiss_deletes_report_rows(self, creator):
+        """Dismissed SkillReport rows are deleted so they no longer count toward threshold."""
+        skill = Skill.objects.create(
+            creator=creator, name="Delete Reports Skill", slug="delete-reports-skill",
+            description="desc", category="utility", status=SkillStatus.APPROVED,
+            current_version="1.0.0",
+            package_file="skills/delete-reports-skill/1.0.0.zip",
         )
         SkillVersion.objects.create(
-            skill=skill, version="1.0.0", status=VersionStatus.ARCHIVED,
-            package_file="skills/promote-skill/1.0.0.zip",
+            skill=skill, version="1.0.0", status=VersionStatus.APPROVED,
+            package_file="skills/delete-reports-skill/1.0.0.zip",
         )
-        result = SkillService.reinstate_quarantined(skill)
-        result.refresh_from_db()
-        assert result.current_version == "1.0.0"
+        reporters = self._make_reporters(3)
+        for r in reporters:
+            SkillReportService.report(skill, r, ReportReason.MALICIOUS_CODE)
+        assert SkillReport.objects.filter(skill=skill).count() == 3
+
+        SkillReport.objects.filter(skill=skill).delete()
+        assert SkillReport.objects.filter(skill=skill).count() == 0

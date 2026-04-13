@@ -124,17 +124,15 @@ class SkillReportAdmin(admin.ModelAdmin):
     def dismiss_reports_selected(self, request, queryset):
         from apps.skills.services import SkillService
         from apps.skills.models import VersionStatus
-        updated = 0
         seen = set()
         for report in queryset.select_related("skill"):
             skill = report.skill
-            if skill.id in seen:
-                continue
-            if skill.status == "ARCHIVED" or skill.versions.filter(status=VersionStatus.ARCHIVED).exists():
-                SkillService.reinstate_quarantined(skill)
+            if skill.id not in seen:
+                if skill.status == "ARCHIVED" or skill.versions.filter(status=VersionStatus.ARCHIVED).exists():
+                    SkillService.reinstate_quarantined(skill)
                 seen.add(skill.id)
-                updated += 1
-        self.message_user(request, f"已驳回举报并恢复 {updated} 个 Skill")
+        deleted, _ = queryset.delete()
+        self.message_user(request, f"已驳回 {deleted} 条举报并解除隔离")
 
 
 @admin.register(SkillVersion)

@@ -387,12 +387,21 @@ class SkillService:
            re-promote it if it's newer than current_version.
         """
         if skill.status == SkillStatus.ARCHIVED:
-            latest_approved = skill.versions.filter(
+            # Find the version to reinstate: prefer already-approved, else restore
+            # the most recently archived one (the quarantine victim).
+            live_version = skill.versions.filter(
                 status=VersionStatus.APPROVED
             ).order_by("-created_at").first()
-            if latest_approved:
-                skill.current_version = latest_approved.version
-                skill.package_file = latest_approved.package_file
+            if not live_version:
+                live_version = skill.versions.filter(
+                    status=VersionStatus.ARCHIVED
+                ).order_by("-created_at").first()
+                if live_version:
+                    live_version.status = VersionStatus.APPROVED
+                    live_version.save(update_fields=["status"])
+            if live_version:
+                skill.current_version = live_version.version
+                skill.package_file = live_version.package_file
             skill.status = SkillStatus.APPROVED
             skill.save(update_fields=["status", "current_version", "package_file", "updated_at"])
             SearchService.sync_skill(skill)
