@@ -1,22 +1,7 @@
 # docker-compose.yml for server deployment (pulls pre-built images from ghcr.io)
-# Place this at ~/camel-deploy/docker-compose.yml on the server
+# Synced to ~/camel-deploy/docker-compose.yml on the server by GitHub Actions
 
 services:
-  postgres:
-    image: postgres:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-camel_db}
-      POSTGRES_USER: ${POSTGRES_USER:-camel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-camel} -d ${POSTGRES_DB:-camel_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   redis:
     image: redis:7
     restart: unless-stopped
@@ -41,8 +26,6 @@ services:
     env_file:
       - ./backend.prod.env
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       meilisearch:
@@ -58,21 +41,20 @@ services:
 
   beat:
     <<: *backend_base
-    command: ["celery", "-A", "config", "beat", "-l", "info"]
+    command: ["celery", "-A", "config", "beat", "-l", "info", "--schedule=/tmp/celerybeat-schedule"]
 
   frontend:
     image: ghcr.io/open-shadow/camel-frontend:latest
     depends_on:
       - backend
     ports:
-      - "127.0.0.1:3000:80"
+      - "127.0.0.1:8293:80"
     volumes:
       - static_data:/var/www/static:ro
       - media_data:/var/www/media:ro
     restart: unless-stopped
 
 volumes:
-  postgres_data:
   redis_data:
   meilisearch_data:
   static_data:
