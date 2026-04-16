@@ -67,6 +67,14 @@ class User(AbstractUser):
                 name="unique_email_ci",
                 condition=~models.Q(email=""),
             ),
+            models.CheckConstraint(
+                check=models.Q(balance__gte=0),
+                name="user_balance_non_negative",
+            ),
+            models.CheckConstraint(
+                check=models.Q(frozen_balance__gte=0),
+                name="user_frozen_balance_non_negative",
+            ),
         ]
 
     def save(self, *args, **kwargs):

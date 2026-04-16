@@ -130,6 +130,12 @@ class SkillReview(models.Model):
     class Meta:
         db_table = "skills_skill_review"
         unique_together = ("skill", "reviewer")
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(rating__gte=1, rating__lte=5),
+                name="skill_review_rating_range",
+            ),
+        ]
 
 
 class SkillUsagePreference(models.Model):

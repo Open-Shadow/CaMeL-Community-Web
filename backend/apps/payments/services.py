@@ -176,7 +176,6 @@ class PaymentsService:
         description: str = "",
         stripe_payment_intent: str = "",
     ) -> Transaction:
-        user.refresh_from_db(fields=["balance"])
         return Transaction.objects.create(
             user=user,
             transaction_type=transaction_type,
