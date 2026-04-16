@@ -82,7 +82,8 @@ def run_skill_scan(skill_id: int, version_id: int | None = None):
     warnings = []
     metadata_failed = False
     try:
-        scan_file.seek(0)
+        scan_file.close()
+        scan_file.open('rb')
         pkg_data = PackageService.process_upload(scan_file)
         version_in_pkg = pkg_data.get("version", "")
         # Check version matches what was declared
