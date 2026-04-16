@@ -906,8 +906,9 @@ class SkillService:
             duration_ms=duration_ms,
         )
 
-        skill.total_calls += 1
-        skill.save(update_fields=["total_calls"])
+        from django.db.models import F
+        Skill.objects.filter(id=skill.id).update(total_calls=F("total_calls") + 1)
+        skill.refresh_from_db(fields=["total_calls"])
 
         if skill.total_calls % 100 == 0:
             CreditService.add_credit(skill.creator, CreditAction.SKILL_CALLED, str(skill.id))

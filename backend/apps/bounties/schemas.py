@@ -10,7 +10,7 @@ class BountyCreateInput(Schema):
     bounty_type: str
     max_applicants: int = 1
     workload_estimate: str = ""
-    reward: float
+    reward: float  # validated in service layer; must be >= 1.00
     deadline: str
 
 

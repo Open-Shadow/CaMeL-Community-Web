@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
-from django.db.models import Sum, Count
+from django.db.models import F, Sum, Count
 
 from apps.accounts.models import User
 from apps.credits.models import CreditAction
@@ -295,7 +295,7 @@ class PaymentsService:
         PaymentsService._create_transaction(
             creator,
             TransactionType.BOUNTY_RELEASE,
-            Decimal("0.00"),
+            -normalized_amount,
             reference_id=reference_id,
             description="悬赏金额已结算给接单者",
         )
@@ -381,8 +381,9 @@ class PaymentsService:
         recipient.balance = quantize_amount(recipient.balance + normalized_amount)
         recipient.save(update_fields=["balance"])
 
-        article.total_tips = quantize_amount(article.total_tips + normalized_amount)
-        article.save(update_fields=["total_tips"])
+        Article.objects.filter(id=article.id).update(
+            total_tips=F("total_tips") + normalized_amount
+        )
 
         tip = Tip.objects.create(
             article=article,

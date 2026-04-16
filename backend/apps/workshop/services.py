@@ -73,7 +73,7 @@ class TipService:
 
         # Update article total_tips
         Article.objects.filter(id=article_id).update(
-            total_tips=article.total_tips + amount
+            total_tips=F("total_tips") + amount
         )
 
         # Credit score for tipper
@@ -787,7 +787,8 @@ class SeriesService:
     @classmethod
     @transaction.atomic
     def ensure_completion_reward(cls, series: Series) -> bool:
-        series.refresh_from_db()
+        from apps.workshop.models import Series
+        series = Series.objects.select_for_update().get(id=series.id)
         cls.refresh_completion_state(series)
         if not series.is_completed or series.completion_rewarded:
             return False
