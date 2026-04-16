@@ -56,15 +56,7 @@ def _handle_checkout_completed(session: dict):
     # Dedup + deposit inside one atomic block to prevent concurrent
     # Stripe webhook retries from crediting the user twice.
     from django.db import transaction, IntegrityError
-    from django.core.cache import cache
     from apps.payments.models import Transaction
-
-    # Use session_id as a cache-based idempotency key for payment methods
-    # that don't produce a payment_intent (BACS, SEPA, etc.)
-    if session_id:
-        dedup_cache_key = f"stripe:checkout:{session_id}"
-        if not cache.add(dedup_cache_key, 1, timeout=86400):
-            return  # Already processing or processed
 
     try:
         with transaction.atomic():
@@ -76,8 +68,18 @@ def _handle_checkout_completed(session: dict):
             ).exists():
                 return  # Already processed
 
+            # For payment methods without a payment_intent (BACS, SEPA, etc.),
+            # deduplicate by session_id stored as reference_id.
+            if not payment_intent and session_id and Transaction.objects.filter(
+                reference_id=f"stripe_session:{session_id}"
+            ).exists():
+                return  # Already processed
+
+            ref_id = f"stripe_session:{session_id}" if session_id else ""
             TransactionService.record_deposit(
-                locked_user, amount, stripe_payment_intent=payment_intent
+                locked_user, amount,
+                stripe_payment_intent=payment_intent,
+                reference_id=ref_id,
             )
     except IntegrityError:
         return  # Concurrent insert — safe to ignore

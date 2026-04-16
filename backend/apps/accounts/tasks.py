@@ -92,9 +92,13 @@ def check_first_deposit_reward(invitee_id: int):
         if invitation.first_deposit_rewarded:
             return
 
+        from apps.payments.services import PaymentsService
         inviter = User.objects.select_for_update().get(id=invitation.inviter_id)
-        inviter.balance += Decimal("0.50")
-        inviter.save(update_fields=["balance"])
+        PaymentsService.create_deposit(
+            inviter,
+            Decimal("0.50"),
+            reference_id=f"invite-deposit-reward:{invitation.id}",
+        )
 
         invitation.first_deposit_rewarded = True
         invitation.save(update_fields=["first_deposit_rewarded"])

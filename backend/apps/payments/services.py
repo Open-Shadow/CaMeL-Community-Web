@@ -33,7 +33,8 @@ class TransactionService:
     @classmethod
     @transaction.atomic
     def record_deposit(cls, user, amount: Decimal,
-                       stripe_payment_intent: str = "") -> Transaction:
+                       stripe_payment_intent: str = "",
+                       reference_id: str = "") -> Transaction:
         """Record a deposit and add to user balance."""
         user = User.objects.select_for_update().get(id=user.id)
         user.balance += amount
@@ -45,6 +46,7 @@ class TransactionService:
             amount=amount,
             balance_after=user.balance,
             stripe_payment_intent=stripe_payment_intent,
+            reference_id=reference_id,
             description=f"充值 ${amount}",
         )
 
