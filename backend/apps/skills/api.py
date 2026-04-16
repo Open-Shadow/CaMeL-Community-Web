@@ -193,8 +193,10 @@ def list_recommended_skills(request, limit: int = 8):
 
 
 @router.get("/purchased", response=List[SkillPurchaseDetailOut], auth=AuthBearer())
-def list_purchased_skills(request):
-    purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill__creator").order_by("-created_at")
+def list_purchased_skills(request, limit: int = 20, offset: int = 0):
+    safe_limit = min(max(limit, 1), 100)
+    safe_offset = max(offset, 0)
+    purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill__creator").order_by("-created_at")[safe_offset:safe_offset + safe_limit]
     results = []
     for p in purchases:
         out = _skill_out(p.skill, request.auth)

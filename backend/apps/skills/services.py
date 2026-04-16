@@ -708,9 +708,6 @@ class SkillService:
             # Fall back to applying only explicit pending_metadata
             for field, value in (version_obj.pending_metadata or {}).items():
                 setattr(skill, field, value)
-        from apps.search.services import SearchService
-        skill.save()
-        SearchService.sync_skill(skill)
 
     @classmethod
     @transaction.atomic

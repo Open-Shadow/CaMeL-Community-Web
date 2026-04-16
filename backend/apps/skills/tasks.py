@@ -56,7 +56,11 @@ def run_skill_scan(skill_id: int, version_id: int | None = None):
                 return {"skipped": True, "reason": "No pending version to scan"}
         scan_file = pending_version.package_file
     elif skill.status == SkillStatus.SCANNING:
-        scan_file = skill.package_file
+        # Use the pending SkillVersion file to avoid race with re-uploads
+        pending_version = skill.versions.filter(
+            status=VersionStatus.SCANNING,
+        ).order_by("-created_at").first()
+        scan_file = pending_version.package_file if pending_version else skill.package_file
     else:
         return {"skipped": True, "reason": f"Skill status is {skill.status}"}
 

@@ -629,6 +629,7 @@ class ArticleService:
     @classmethod
     @transaction.atomic
     def vote(cls, article: Article, voter, value: str) -> tuple[Decimal, str]:
+        article = Article.objects.select_for_update().get(id=article.id)
         if article.status != ArticleStatus.PUBLISHED:
             raise ValueError("只能给已发布文章投票")
         if value not in {"UP", "DOWN"}:
@@ -648,6 +649,7 @@ class ArticleService:
     @classmethod
     @transaction.atomic
     def remove_vote(cls, article: Article, voter) -> Decimal:
+        article = Article.objects.select_for_update().get(id=article.id)
         deleted, _details = Vote.objects.filter(article=article, voter=voter).delete()
         if not deleted:
             raise ValueError("当前没有可取消的投票")
