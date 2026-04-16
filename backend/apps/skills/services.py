@@ -597,6 +597,10 @@ class SkillService:
             if is_version_update:
                 # Promote the approved version to live pointers
                 cls._promote_version(skill, latest_version)
+                skill.save(update_fields=["current_version", "package_file",
+                                          "package_sha256", "package_size", "readme_html", "updated_at"])
+                from apps.search.services import SearchService
+                SearchService.sync_skill(skill)
                 NotificationService.send(
                     recipient=skill.creator,
                     notification_type="skill_reviewed",
@@ -1317,6 +1321,10 @@ class SkillReportService:
                 if fallback:
                     # Promote the latest safe version to live pointers
                     SkillService._promote_version(skill, fallback)
+                    skill.save(update_fields=["current_version", "package_file",
+                                              "package_sha256", "package_size", "readme_html", "updated_at"])
+                    from apps.search.services import SearchService
+                    SearchService.sync_skill(skill)
                 else:
                     # No safe versions left — archive the whole skill
                     skill.status = SkillStatus.ARCHIVED
