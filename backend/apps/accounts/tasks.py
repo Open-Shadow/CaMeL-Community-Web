@@ -55,8 +55,12 @@ def grant_invite_register_reward(inviter_id: int, invitee_id: int):
         return
 
     # Inviter reward
-    CreditService.add_credit(inviter, CreditAction.INVITE_REGISTERED,
-                             reference_id=str(invitee_id))
+    CreditService.add_credit(
+        inviter,
+        CreditAction.INVITE_REGISTERED,
+        reference_id=str(invitee_id),
+        idempotency_key=f"invite-registration:inviter-task:{invitee_id}",
+    )
     NotificationService.send(
         recipient=inviter,
         notification_type="invite_reward",

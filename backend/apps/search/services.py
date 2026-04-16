@@ -268,7 +268,9 @@ class SearchService:
             try:
                 cls.optimize_index_settings()
                 index = client.index(cls.SKILL_INDEX)
-                filter_expr = f'category = "{category}"' if category else None
+                from apps.skills.models import SkillCategory
+                safe_category = category if category in set(SkillCategory.values) else None
+                filter_expr = f'category = "{safe_category}"' if safe_category else None
                 result = index.search(
                     q or "",
                     {
@@ -351,11 +353,13 @@ class SearchService:
                 cls.optimize_index_settings()
                 index = client.index(cls.ARTICLE_INDEX)
                 filters = []
-                if difficulty:
+                _VALID_DIFFICULTIES = {"BEGINNER", "INTERMEDIATE", "ADVANCED"}
+                _VALID_ARTICLE_TYPES = {"TUTORIAL", "EXPERIENCE", "REVIEW", "NEWS"}
+                if difficulty and difficulty in _VALID_DIFFICULTIES:
                     filters.append(f'difficulty = "{difficulty}"')
-                if article_type:
+                if article_type and article_type in _VALID_ARTICLE_TYPES:
                     filters.append(f'article_type = "{article_type}"')
-                if model_tag:
+                if model_tag and len(model_tag) <= 50 and model_tag.replace("-", "").replace("_", "").isalnum():
                     filters.append(f'model_tags = "{model_tag}"')
 
                 result = index.search(
