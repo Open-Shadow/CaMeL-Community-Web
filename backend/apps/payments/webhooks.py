@@ -52,9 +52,10 @@ def _handle_checkout_completed(session: dict):
 
     payment_intent = session.get("payment_intent", "")
 
-    # Prevent duplicate processing
+    # Prevent duplicate processing — skip empty payment_intent to avoid
+    # matching all transactions with blank stripe_payment_intent field.
     from apps.payments.models import Transaction
-    if Transaction.objects.filter(stripe_payment_intent=payment_intent).exists():
+    if payment_intent and Transaction.objects.filter(stripe_payment_intent=payment_intent).exists():
         return
 
     TransactionService.record_deposit(

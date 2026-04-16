@@ -126,7 +126,11 @@ ALLOWED_DOCUMENT_TYPES = ["application/pdf", "text/markdown", "text/plain"]
 MAX_PACKAGE_SIZE = 10 * 1024 * 1024  # 10MB ZIP 包最大体积
 MAX_PACKAGE_FILE_SIZE = 2 * 1024 * 1024  # 2MB 单文件最大
 MAX_PACKAGE_FILE_COUNT = 50  # 包内文件数量上限
-FORBIDDEN_EXTENSIONS = {".exe", ".dll", ".so", ".bin", ".pyc"}
+FORBIDDEN_EXTENSIONS = {
+    ".exe", ".dll", ".so", ".bin", ".pyc",
+    ".sh", ".bash", ".bat", ".cmd", ".ps1", ".vbs", ".vbe",
+    ".msi", ".scr", ".com", ".pif",
+}
 PACKAGE_PRESIGNED_URL_EXPIRY = 600  # 预签名 URL 有效期（秒）
 
 # Skill 报告相关

@@ -126,9 +126,11 @@ class PackageService:
             if info.external_attr >> 28 == 0xA:
                 raise ValueError("ZIP 包不允许包含符号链接")
 
-            # Path traversal check
-            normalized = os.path.normpath(info.filename)
-            if normalized.startswith("..") or normalized.startswith("/"):
+            # Path traversal check — use PurePosixPath since ZIP spec mandates
+            # forward slashes, avoiding platform-dependent os.path.normpath bugs.
+            from pathlib import PurePosixPath
+            parts = PurePosixPath(info.filename).parts
+            if ".." in parts or info.filename.startswith("/"):
                 raise ValueError(f"ZIP 包含非法路径：{info.filename}")
 
             # Forbidden extensions

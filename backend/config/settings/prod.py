@@ -12,9 +12,9 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
 )
 SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=True, cast=bool)
 
-# Keep HTTPS-only behavior configurable to avoid redirect loops
-# before reverse-proxy TLS headers are wired correctly.
-SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+# HTTPS redirect enabled by default. Set SECURE_SSL_REDIRECT=False only if
+# the reverse proxy handles TLS termination AND the app cannot see X-Forwarded-Proto.
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=True, cast=bool)
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=True, cast=bool)
 
