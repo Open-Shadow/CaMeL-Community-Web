@@ -51,11 +51,20 @@ def _handle_checkout_completed(session: dict):
     amount = Decimal(amount_cents) / 100
 
     payment_intent = session.get("payment_intent", "")
+    session_id = session.get("id", "")
 
     # Dedup + deposit inside one atomic block to prevent concurrent
     # Stripe webhook retries from crediting the user twice.
     from django.db import transaction, IntegrityError
+    from django.core.cache import cache
     from apps.payments.models import Transaction
+
+    # Use session_id as a cache-based idempotency key for payment methods
+    # that don't produce a payment_intent (BACS, SEPA, etc.)
+    if session_id:
+        dedup_cache_key = f"stripe:checkout:{session_id}"
+        if not cache.add(dedup_cache_key, 1, timeout=86400):
+            return  # Already processing or processed
 
     try:
         with transaction.atomic():
