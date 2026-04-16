@@ -749,6 +749,9 @@ class SkillService:
             pending.status = VersionStatus.APPROVED
             pending.save(update_fields=["status"])
             cls._promote_version(skill, pending)
+            skill.save(update_fields=["current_version", "package_file",
+                                      "package_sha256", "package_size", "readme_html", "updated_at"])
+            SearchService.sync_skill(skill)
             NotificationService.send(
                 recipient=skill.creator,
                 notification_type="skill_reviewed",
