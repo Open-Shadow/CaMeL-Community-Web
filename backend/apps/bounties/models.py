@@ -142,3 +142,17 @@ class BountyReview(models.Model):
     class Meta:
         db_table = "bounties_bounty_review"
         unique_together = ("bounty", "reviewer", "reviewee")
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(quality_rating__gte=1, quality_rating__lte=5),
+                name="bounty_review_quality_range",
+            ),
+            models.CheckConstraint(
+                check=models.Q(communication_rating__gte=1, communication_rating__lte=5),
+                name="bounty_review_communication_range",
+            ),
+            models.CheckConstraint(
+                check=models.Q(responsiveness_rating__gte=1, responsiveness_rating__lte=5),
+                name="bounty_review_responsiveness_range",
+            ),
+        ]

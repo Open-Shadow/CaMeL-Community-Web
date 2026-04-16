@@ -172,7 +172,7 @@ export function ProfileInvitesPage() {
                         {invite.invitee_display_name || invite.invitee_email}
                       </div>
                       <div className="mt-1 text-sm text-slate-500">
-                        {invite.invitee_email} · {invite.code}
+                        {invite.code}
                       </div>
                     </div>
                     <div className="flex flex-col items-start gap-2 md:items-end">

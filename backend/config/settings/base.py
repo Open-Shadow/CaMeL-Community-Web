@@ -119,6 +119,8 @@ CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+CELERY_TASK_TIME_LIMIT = 300        # hard kill at 5 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 240   # SoftTimeLimitExceeded at 4 minutes
 CELERY_BEAT_SCHEDULE = {
     'refresh-skill-trending-cache': {
         'task': 'apps.skills.tasks.refresh_skill_trending_cache',
@@ -241,7 +243,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-SOCIALACCOUNT_LOGIN_ON_GET = True
+SOCIALACCOUNT_LOGIN_ON_GET = False
 SOCIALACCOUNT_STORE_TOKENS = True
 
 # OAuth

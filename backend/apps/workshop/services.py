@@ -73,7 +73,7 @@ class TipService:
 
         # Update article total_tips
         Article.objects.filter(id=article_id).update(
-            total_tips=article.total_tips + amount
+            total_tips=F("total_tips") + amount
         )
 
         # Credit score for tipper
@@ -192,15 +192,26 @@ class ArticleService:
 
     @staticmethod
     def _sanitize_content(content: str) -> str:
-        sanitized = re.sub(
-            r"<\s*(script|style|iframe|object|embed)[^>]*>.*?<\s*/\s*\1\s*>",
-            "",
+        import nh3
+        return nh3.clean(
             content,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        sanitized = re.sub(r"\son[a-zA-Z]+\s*=\s*(['\"]).*?\1", "", sanitized)
-        sanitized = re.sub(r"javascript:", "", sanitized, flags=re.IGNORECASE)
-        return sanitized.strip()
+            tags={
+                "p", "br", "strong", "em", "u", "s", "del", "ins",
+                "h1", "h2", "h3", "h4", "h5", "h6",
+                "ul", "ol", "li", "blockquote", "pre", "code",
+                "a", "img", "table", "thead", "tbody", "tr", "th", "td",
+                "hr", "span", "div",
+            },
+            attributes={
+                "a": {"href", "title", "target"},
+                "img": {"src", "alt", "title", "width", "height"},
+                "code": {"class"},
+                "span": {"class"},
+                "div": {"class"},
+                "td": {"colspan", "rowspan"},
+                "th": {"colspan", "rowspan"},
+            },
+        ).strip()
 
     @classmethod
     def _validate_related_skill(cls, author, related_skill_id: int | None) -> Skill | None:
@@ -618,6 +629,7 @@ class ArticleService:
     @classmethod
     @transaction.atomic
     def vote(cls, article: Article, voter, value: str) -> tuple[Decimal, str]:
+        article = Article.objects.select_for_update().get(id=article.id)
         if article.status != ArticleStatus.PUBLISHED:
             raise ValueError("只能给已发布文章投票")
         if value not in {"UP", "DOWN"}:
@@ -637,6 +649,7 @@ class ArticleService:
     @classmethod
     @transaction.atomic
     def remove_vote(cls, article: Article, voter) -> Decimal:
+        article = Article.objects.select_for_update().get(id=article.id)
         deleted, _details = Vote.objects.filter(article=article, voter=voter).delete()
         if not deleted:
             raise ValueError("当前没有可取消的投票")
@@ -787,7 +800,8 @@ class SeriesService:
     @classmethod
     @transaction.atomic
     def ensure_completion_reward(cls, series: Series) -> bool:
-        series.refresh_from_db()
+        from apps.workshop.models import Series
+        series = Series.objects.select_for_update().get(id=series.id)
         cls.refresh_completion_state(series)
         if not series.is_completed or series.completion_rewarded:
             return False

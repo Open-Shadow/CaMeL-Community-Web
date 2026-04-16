@@ -426,8 +426,7 @@ class SkillService:
             skill.status = SkillStatus.APPROVED
             if live_version:
                 SkillService._promote_version(skill, live_version)
-            skill.save(update_fields=["status", "current_version", "package_file",
-                                      "package_sha256", "package_size", "readme_html", "updated_at"])
+            skill.save()
             SearchService.sync_skill(skill)
             cache.delete(SkillService.TRENDING_CACHE_KEY)
             return skill
@@ -443,8 +442,7 @@ class SkillService:
             try:
                 if not skill.current_version or PkgVersion(quarantined.version) > PkgVersion(skill.current_version):
                     SkillService._promote_version(skill, quarantined)
-                    skill.save(update_fields=["current_version", "package_file",
-                                              "package_sha256", "package_size", "readme_html", "updated_at"])
+                    skill.save()
             except Exception:
                 pass
         return skill
@@ -597,6 +595,9 @@ class SkillService:
             if is_version_update:
                 # Promote the approved version to live pointers
                 cls._promote_version(skill, latest_version)
+                skill.save()
+                from apps.search.services import SearchService
+                SearchService.sync_skill(skill)
                 NotificationService.send(
                     recipient=skill.creator,
                     notification_type="skill_reviewed",
@@ -690,8 +691,11 @@ class SkillService:
         # Re-render readme and extract metadata from the package
         try:
             from apps.skills.package_service import PackageService
-            version_obj.package_file.seek(0)
-            result = PackageService.process_upload(version_obj.package_file)
+            version_obj.package_file.open('rb')
+            try:
+                result = PackageService.process_upload(version_obj.package_file)
+            finally:
+                version_obj.package_file.close()
             skill.readme_html = result.get("readme_html", skill.readme_html)
             # For new versions: apply creator-submitted deferred metadata.
             # For fallback promotions (pending_metadata == {}): restore metadata
@@ -708,9 +712,6 @@ class SkillService:
             # Fall back to applying only explicit pending_metadata
             for field, value in (version_obj.pending_metadata or {}).items():
                 setattr(skill, field, value)
-        from apps.search.services import SearchService
-        skill.save()
-        SearchService.sync_skill(skill)
 
     @classmethod
     @transaction.atomic
@@ -748,6 +749,8 @@ class SkillService:
             pending.status = VersionStatus.APPROVED
             pending.save(update_fields=["status"])
             cls._promote_version(skill, pending)
+            skill.save()
+            SearchService.sync_skill(skill)
             NotificationService.send(
                 recipient=skill.creator,
                 notification_type="skill_reviewed",
@@ -906,8 +909,9 @@ class SkillService:
             duration_ms=duration_ms,
         )
 
-        skill.total_calls += 1
-        skill.save(update_fields=["total_calls"])
+        from django.db.models import F
+        Skill.objects.filter(id=skill.id).update(total_calls=F("total_calls") + 1)
+        skill.refresh_from_db(fields=["total_calls"])
 
         if skill.total_calls % 100 == 0:
             CreditService.add_credit(skill.creator, CreditAction.SKILL_CALLED, str(skill.id))
@@ -1319,6 +1323,9 @@ class SkillReportService:
                 if fallback:
                     # Promote the latest safe version to live pointers
                     SkillService._promote_version(skill, fallback)
+                    skill.save()
+                    from apps.search.services import SearchService
+                    SearchService.sync_skill(skill)
                 else:
                     # No safe versions left — archive the whole skill
                     skill.status = SkillStatus.ARCHIVED

@@ -51,22 +51,48 @@ def _handle_checkout_completed(session: dict):
     amount = Decimal(amount_cents) / 100
 
     payment_intent = session.get("payment_intent", "")
+    session_id = session.get("id", "")
 
-    # Prevent duplicate processing
+    # Dedup + deposit inside one atomic block to prevent concurrent
+    # Stripe webhook retries from crediting the user twice.
+    from django.db import transaction, IntegrityError
     from apps.payments.models import Transaction
-    if Transaction.objects.filter(stripe_payment_intent=payment_intent).exists():
-        return
 
-    TransactionService.record_deposit(
-        user, amount, stripe_payment_intent=payment_intent
-    )
+    try:
+        with transaction.atomic():
+            # Lock the user row to serialize concurrent webhook processing
+            locked_user = User.objects.select_for_update().get(id=user.id)
 
-    NotificationService.send(
-        recipient=user,
-        notification_type="deposit",
-        title="充值成功",
-        content=f"${amount} 已到账",
-    )
+            if payment_intent and Transaction.objects.filter(
+                stripe_payment_intent=payment_intent
+            ).exists():
+                return  # Already processed
+
+            # For payment methods without a payment_intent (BACS, SEPA, etc.),
+            # deduplicate by session_id stored as reference_id.
+            if not payment_intent and session_id and Transaction.objects.filter(
+                reference_id=f"stripe_session:{session_id}"
+            ).exists():
+                return  # Already processed
+
+            ref_id = f"stripe_session:{session_id}" if session_id else ""
+            TransactionService.record_deposit(
+                locked_user, amount,
+                stripe_payment_intent=payment_intent,
+                reference_id=ref_id,
+            )
+    except IntegrityError:
+        return  # Concurrent insert — safe to ignore
+
+    try:
+        NotificationService.send(
+            recipient=user,
+            notification_type="deposit",
+            title="充值成功",
+            content=f"${amount} 已到账",
+        )
+    except Exception:
+        pass  # Deposit succeeded; notification failure should not trigger Stripe retry
 
     # Check first-deposit invite reward
     if user.invited_by_id:

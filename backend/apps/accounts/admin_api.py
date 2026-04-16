@@ -219,8 +219,9 @@ def list_users(request, page: int = 1, page_size: int = 20,
         sort = "-date_joined"
 
     total = qs.count()
-    offset = (page - 1) * page_size
-    users = qs.order_by(sort)[offset:offset + page_size]
+    safe_page_size = min(max(page_size, 1), 100)
+    offset = max((page - 1) * safe_page_size, 0)
+    users = qs.order_by(sort)[offset:offset + safe_page_size]
 
     return {
         "users": [

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { api } from '@/hooks/use-auth';
+import { api, useAuth } from '@/hooks/use-auth';
 
 interface CreditLog {
   id: number;
@@ -13,14 +14,21 @@ interface CreditLog {
 }
 
 export function CreditHistoryPage() {
+  const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [logs, setLogs] = useState<CreditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!authLoading && !isAuthenticated) navigate('/login');
+  }, [isAuthenticated, authLoading, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     api.get('/users/me/credit-history')
       .then((res) => setLogs(res.data))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [isAuthenticated]);
 
   return (
     <div className="container mx-auto py-8 max-w-2xl">

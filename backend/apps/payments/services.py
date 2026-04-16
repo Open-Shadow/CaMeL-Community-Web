@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
-from django.db.models import Sum, Count
+from django.db.models import F, Sum, Count
 
 from apps.accounts.models import User
 from apps.credits.models import CreditAction
@@ -33,7 +33,8 @@ class TransactionService:
     @classmethod
     @transaction.atomic
     def record_deposit(cls, user, amount: Decimal,
-                       stripe_payment_intent: str = "") -> Transaction:
+                       stripe_payment_intent: str = "",
+                       reference_id: str = "") -> Transaction:
         """Record a deposit and add to user balance."""
         user = User.objects.select_for_update().get(id=user.id)
         user.balance += amount
@@ -45,6 +46,7 @@ class TransactionService:
             amount=amount,
             balance_after=user.balance,
             stripe_payment_intent=stripe_payment_intent,
+            reference_id=reference_id,
             description=f"充值 ${amount}",
         )
 
@@ -176,7 +178,6 @@ class PaymentsService:
         description: str = "",
         stripe_payment_intent: str = "",
     ) -> Transaction:
-        user.refresh_from_db(fields=["balance"])
         return Transaction.objects.create(
             user=user,
             transaction_type=transaction_type,
@@ -190,6 +191,7 @@ class PaymentsService:
     @staticmethod
     @transaction.atomic
     def create_deposit(user: User, amount: Decimal | float | int | str, *, reference_id: str = "") -> Decimal:
+        user = User.objects.select_for_update().get(id=user.id)
         normalized_amount = quantize_amount(amount)
         if normalized_amount <= 0:
             raise PaymentError("充值金额必须大于 0")
@@ -227,6 +229,7 @@ class PaymentsService:
     @staticmethod
     @transaction.atomic
     def reserve_bounty_escrow(user: User, amount: Decimal | float | int | str, *, reference_id: str) -> Decimal:
+        user = User.objects.select_for_update().get(id=user.id)
         normalized_amount = quantize_amount(amount)
         if normalized_amount <= 0:
             raise PaymentError("托管金额必须大于 0")
@@ -248,6 +251,7 @@ class PaymentsService:
     @staticmethod
     @transaction.atomic
     def release_bounty_to_creator(user: User, amount: Decimal | float | int | str, *, reference_id: str) -> Decimal:
+        user = User.objects.select_for_update().get(id=user.id)
         normalized_amount = quantize_amount(amount)
         if normalized_amount <= 0:
             return Decimal("0.00")
@@ -275,6 +279,8 @@ class PaymentsService:
         *,
         reference_id: str,
     ) -> Decimal:
+        creator = User.objects.select_for_update().get(id=creator.id)
+        hunter = User.objects.select_for_update().get(id=hunter.id)
         normalized_amount = quantize_amount(amount)
         if normalized_amount <= 0:
             return Decimal("0.00")
@@ -290,7 +296,7 @@ class PaymentsService:
         PaymentsService._create_transaction(
             creator,
             TransactionType.BOUNTY_RELEASE,
-            Decimal("0.00"),
+            -normalized_amount,
             reference_id=reference_id,
             description="悬赏金额已结算给接单者",
         )
@@ -306,6 +312,8 @@ class PaymentsService:
     @staticmethod
     @transaction.atomic
     def charge_skill_call(caller: User, creator: User, *, price: Decimal | float | int | str, reference_id: str) -> dict:
+        caller = User.objects.select_for_update().get(id=caller.id)
+        creator = User.objects.select_for_update().get(id=creator.id)
         normalized_price = quantize_amount(price)
         if normalized_price <= 0:
             return {
@@ -358,6 +366,7 @@ class PaymentsService:
     @staticmethod
     @transaction.atomic
     def create_tip(tipper: User, article: Article, amount: Decimal | float | int | str) -> Tip:
+        tipper = User.objects.select_for_update().get(id=tipper.id)
         normalized_amount = quantize_amount(amount)
         if normalized_amount <= 0:
             raise PaymentError("打赏金额必须大于 0")
@@ -366,15 +375,16 @@ class PaymentsService:
         if tipper.balance < normalized_amount:
             raise PaymentError("余额不足，无法完成打赏")
 
-        recipient = article.author
+        recipient = User.objects.select_for_update().get(id=article.author_id)
         tipper.balance = quantize_amount(tipper.balance - normalized_amount)
         tipper.save(update_fields=["balance"])
 
         recipient.balance = quantize_amount(recipient.balance + normalized_amount)
         recipient.save(update_fields=["balance"])
 
-        article.total_tips = quantize_amount(article.total_tips + normalized_amount)
-        article.save(update_fields=["total_tips"])
+        Article.objects.filter(id=article.id).update(
+            total_tips=F("total_tips") + normalized_amount
+        )
 
         tip = Tip.objects.create(
             article=article,
@@ -454,6 +464,7 @@ class PaymentsService:
     @staticmethod
     @transaction.atomic
     def charge_appeal_fee(user: User, *, reference_id: str) -> Decimal:
+        user = User.objects.select_for_update().get(id=user.id)
         if user.balance < APPEAL_FEE:
             raise PaymentError("余额不足，无法支付上诉费")
 

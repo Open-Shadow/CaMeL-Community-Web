@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,10 @@ import { useAuth } from '@/hooks/use-auth'
 
 export default function CreateBountyPage() {
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) navigate('/login')
+  }, [isAuthenticated, isLoading, navigate])
   const [form, setForm] = useState({
     title: '',
     description: '',

@@ -56,7 +56,11 @@ def run_skill_scan(skill_id: int, version_id: int | None = None):
                 return {"skipped": True, "reason": "No pending version to scan"}
         scan_file = pending_version.package_file
     elif skill.status == SkillStatus.SCANNING:
-        scan_file = skill.package_file
+        # Use the pending SkillVersion file to avoid race with re-uploads
+        pending_version = skill.versions.filter(
+            status=VersionStatus.SCANNING,
+        ).order_by("-created_at").first()
+        scan_file = pending_version.package_file if pending_version else skill.package_file
     else:
         return {"skipped": True, "reason": f"Skill status is {skill.status}"}
 
@@ -78,7 +82,8 @@ def run_skill_scan(skill_id: int, version_id: int | None = None):
     warnings = []
     metadata_failed = False
     try:
-        scan_file.seek(0)
+        scan_file.close()
+        scan_file.open('rb')
         pkg_data = PackageService.process_upload(scan_file)
         version_in_pkg = pkg_data.get("version", "")
         # Check version matches what was declared
@@ -97,6 +102,11 @@ def run_skill_scan(skill_id: int, version_id: int | None = None):
         issues.append(f"元数据校验失败：{e}")
     except Exception:
         warnings.append("元数据提取失败，请检查 SKILL.md 格式")
+    finally:
+        try:
+            scan_file.close()
+        except Exception:
+            pass
 
     if metadata_failed:
         passed = False

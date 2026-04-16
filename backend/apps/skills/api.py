@@ -150,7 +150,8 @@ def get_my_skills(request):
 
 @router.get("/trending/list", response=List[SkillTrendingOut])
 def list_trending_skills(request, limit: int = 10):
-    skills = SkillService.list_trending(limit=limit)
+    safe_limit = min(max(limit, 1), 50)
+    skills = SkillService.list_trending(limit=safe_limit)
     return [
         {
             "id": skill.id,
@@ -192,8 +193,10 @@ def list_recommended_skills(request, limit: int = 8):
 
 
 @router.get("/purchased", response=List[SkillPurchaseDetailOut], auth=AuthBearer())
-def list_purchased_skills(request):
-    purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill__creator").order_by("-created_at")
+def list_purchased_skills(request, limit: int = 20, offset: int = 0):
+    safe_limit = min(max(limit, 1), 100)
+    safe_offset = max(offset, 0)
+    purchases = SkillPurchase.objects.filter(user=request.auth).select_related("skill__creator").order_by("-created_at")[safe_offset:safe_offset + safe_limit]
     results = []
     for p in purchases:
         out = _skill_out(p.skill, request.auth)
@@ -339,8 +342,8 @@ def download_skill(request, skill_id: int, version: Optional[str] = None):
     from apps.skills.package_service import PackageService
     url = PackageService.generate_download_url(package_file.name)
 
-    skill.download_count += 1
-    skill.save(update_fields=["download_count"])
+    from django.db.models import F
+    Skill.objects.filter(id=skill.id).update(download_count=F("download_count") + 1)
 
     return {"url": url}
 

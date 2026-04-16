@@ -28,3 +28,15 @@ class Transaction(models.Model):
     class Meta:
         db_table = "payments_transaction"
         indexes = [models.Index(fields=["user", "created_at"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stripe_payment_intent"],
+                condition=~models.Q(stripe_payment_intent=""),
+                name="unique_stripe_payment_intent",
+            ),
+            models.UniqueConstraint(
+                fields=["reference_id"],
+                condition=models.Q(reference_id__startswith="stripe_session:"),
+                name="unique_stripe_session_reference",
+            ),
+        ]

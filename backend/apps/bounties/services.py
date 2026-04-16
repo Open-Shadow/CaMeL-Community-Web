@@ -82,24 +82,34 @@ class BountyService:
             accepted_application__isnull=False,
         ).select_related("accepted_application__applicant")
         for bounty in overdue_queryset:
-            applicant = bounty.accepted_application.applicant
-            if not CreditLog.objects.filter(
-                user=applicant,
-                action=CreditAction.BOUNTY_TIMEOUT,
-                reference_id=f"bounty-timeout:{bounty.id}",
-            ).exists():
-                CreditService.deduct_credit(applicant, CreditAction.BOUNTY_TIMEOUT, f"bounty-timeout:{bounty.id}")
-            bounty.accepted_application = None
-            bounty.status = BountyStatus.OPEN
-            bounty.save(update_fields=["accepted_application", "status"])
+            with transaction.atomic():
+                bounty = Bounty.objects.select_for_update().get(id=bounty.id)
+                if bounty.status not in [BountyStatus.IN_PROGRESS, BountyStatus.REVISION]:
+                    continue
+                applicant = bounty.accepted_application.applicant
+                if not CreditLog.objects.filter(
+                    user=applicant,
+                    action=CreditAction.BOUNTY_TIMEOUT,
+                    reference_id=f"bounty-timeout:{bounty.id}",
+                ).exists():
+                    CreditService.deduct_credit(applicant, CreditAction.BOUNTY_TIMEOUT, f"bounty-timeout:{bounty.id}")
+                bounty.accepted_application = None
+                bounty.status = BountyStatus.OPEN
+                bounty.save(update_fields=["accepted_application", "status"])
 
         review_queryset = Bounty.objects.filter(
             status__in=[BountyStatus.DELIVERED, BountyStatus.IN_REVIEW],
-        )
-        for bounty in review_queryset:
-            latest_delivery = bounty.deliverables.order_by("-created_at").first()
-            if latest_delivery and latest_delivery.created_at <= now - timedelta(days=7):
-                cls.approve_delivery(bounty.creator, bounty)
+        ).values_list("id", flat=True)
+        for bounty_id in list(review_queryset):
+            with transaction.atomic():
+                bounty = Bounty.objects.select_for_update().select_related(
+                    "creator", "accepted_application__applicant"
+                ).get(id=bounty_id)
+                if bounty.status not in [BountyStatus.DELIVERED, BountyStatus.IN_REVIEW]:
+                    continue
+                latest_delivery = bounty.deliverables.order_by("-created_at").first()
+                if latest_delivery and latest_delivery.created_at <= now - timedelta(days=7):
+                    cls.approve_delivery(bounty.creator, bounty)
 
     @classmethod
     @transaction.atomic
@@ -114,6 +124,8 @@ class BountyService:
         reward = quantize_amount(data["reward"])
         if reward < Decimal("1.00"):
             raise BountyError("悬赏金额至少为 $1.00")
+        if reward > Decimal("10000.00"):
+            raise BountyError("悬赏金额不得超过 $10,000.00")
         if data["bounty_type"] not in set(BountyType.values):
             raise BountyError("悬赏类型无效")
         if not CreditService.can_post_bounty(creator):
@@ -158,6 +170,13 @@ class BountyService:
             reward=reward,
             deadline=deadline,
         )
+        # Update escrow transaction reference_id to use the actual bounty ID
+        from apps.payments.models import Transaction
+        Transaction.objects.filter(
+            user=creator,
+            reference_id=f"bounty:{creator.id}:{title}",
+            transaction_type="BOUNTY_ESCROW",
+        ).order_by("-created_at").update(reference_id=f"bounty:{bounty.id}:escrow")
         return bounty
 
     @classmethod
@@ -297,12 +316,11 @@ class BountyService:
         if bounty.status not in [BountyStatus.OPEN, BountyStatus.IN_PROGRESS]:
             raise BountyError("当前状态下不能取消悬赏")
 
-        if bounty.creator.frozen_balance > 0:
-            PaymentsService.release_bounty_to_creator(
-                bounty.creator,
-                bounty.reward,
-                reference_id=f"bounty:{bounty.id}:cancel",
-            )
+        PaymentsService.release_bounty_to_creator(
+            bounty.creator,
+            bounty.reward,
+            reference_id=f"bounty:{bounty.id}:cancel",
+        )
         bounty.status = BountyStatus.CANCELLED
         bounty.save(update_fields=["status"])
         if reason.strip():
@@ -373,6 +391,8 @@ class BountyService:
             .order_by("-credit_score", "id")[:3]
         )
         arbitration.arbitrators.set(candidates)
+        if arbitration.arbitrators.count() < 3:
+            raise BountyError("符合资格的仲裁员不足 3 人，暂无法启动仲裁")
         arbitration.save()
         bounty.status = BountyStatus.ARBITRATING
         bounty.save(update_fields=["status"])
@@ -390,6 +410,11 @@ class BountyService:
             raise BountyError("当前用户不是该仲裁案陪审员")
         if vote not in {"HUNTER_WIN", "CREATOR_WIN", "PARTIAL"}:
             raise BountyError("仲裁投票结果无效")
+        if vote == "PARTIAL":
+            if hunter_ratio is None:
+                raise BountyError("PARTIAL 投票必须指定 hunter_ratio")
+            if not (0 <= hunter_ratio <= 1):
+                raise BountyError("hunter_ratio 必须在 0 到 1 之间")
 
         ArbitrationVote.objects.update_or_create(
             arbitration=arbitration,
@@ -552,7 +577,7 @@ class BountyService:
         ratio = quantize_amount(hunter_ratio or 0)
         ratio = min(max(ratio, Decimal("0.00")), Decimal("1.00"))
         payout = quantize_amount(bounty.reward * ratio)
-        refund = quantize_amount(bounty.reward - payout)
+        refund = bounty.reward - payout  # derive from payout to guarantee payout + refund == reward
 
         if payout > 0:
             PaymentsService.settle_bounty_payout(

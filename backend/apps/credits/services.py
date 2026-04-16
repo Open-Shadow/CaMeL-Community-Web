@@ -64,6 +64,7 @@ class CreditService:
             if existing_log:
                 return existing_log.score_after
 
+        user = User.objects.select_for_update().get(id=user.id)
         score_before = user.credit_score
         score_after = max(0, score_before + amount)
         stored_reference = idempotency_key or reference_id
@@ -107,6 +108,7 @@ class CreditService:
         if amount >= 0:
             return user.credit_score
 
+        user = User.objects.select_for_update().get(id=user.id)
         score_before = user.credit_score
         score_after = max(0, score_before + amount)  # amount is negative
 
@@ -145,6 +147,7 @@ class CreditService:
         if amount == 0:
             return user.credit_score
 
+        user = User.objects.select_for_update().get(id=user.id)
         score_before = user.credit_score
         score_after = max(0, score_before + amount)
 
@@ -209,6 +212,7 @@ class CreditService:
     @transaction.atomic
     def admin_adjust(cls, user: User, amount: int, reference_id: str = "") -> int:
         """Admin manual credit adjustment. Supports arbitrary positive/negative amounts."""
+        user = User.objects.select_for_update().get(id=user.id)
         score_before = user.credit_score
         score_after = max(0, score_before + amount)
 

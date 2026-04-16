@@ -208,6 +208,10 @@ def get_skill_income_dashboard(request):
 @router.post("/articles/{article_id}/tip", response={200: MessageOutput, 400: MessageOutput})
 def tip_article(request, article_id: int, data: TipInput):
     """Tip an article author."""
+    if data.amount < 0.01:
+        return 400, {"message": "打赏金额最低 $0.01"}
+    if data.amount > 100.0:
+        return 400, {"message": "单次打赏最高 $100.00"}
     article = get_object_or_404(Article, id=article_id)
     try:
         PaymentsService.create_tip(request.auth, article, data.amount)

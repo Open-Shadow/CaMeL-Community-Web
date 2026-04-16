@@ -26,7 +26,7 @@ from apps.bounties.schemas import (
 )
 from apps.bounties.services import BountyError, BountyService
 from apps.payments.services import PaymentError
-from common.permissions import AuthBearer
+from common.permissions import AuthBearer, admin_required
 
 router = Router(tags=["bounties"])
 
@@ -410,6 +410,7 @@ def appeal_arbitration(request, bounty_id: int, data: ArbitrationAppealInput):
 
 
 @router.post("/{bounty_id}/arbitration/admin-finalize", response={200: BountyDetailOut, 400: MessageOut}, auth=AuthBearer())
+@admin_required
 def admin_finalize_arbitration(request, bounty_id: int, data: AdminArbitrationDecisionInput):
     bounty = get_object_or_404(Bounty.objects.select_related("creator", "accepted_application__applicant"), id=bounty_id)
     try:

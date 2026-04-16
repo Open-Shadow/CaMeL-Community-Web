@@ -55,8 +55,12 @@ def grant_invite_register_reward(inviter_id: int, invitee_id: int):
         return
 
     # Inviter reward
-    CreditService.add_credit(inviter, CreditAction.INVITE_REGISTERED,
-                             reference_id=str(invitee_id))
+    CreditService.add_credit(
+        inviter,
+        CreditAction.INVITE_REGISTERED,
+        reference_id=str(invitee_id),
+        idempotency_key=f"invite-registration:inviter-task:{invitee_id}",
+    )
     NotificationService.send(
         recipient=inviter,
         notification_type="invite_reward",
@@ -69,6 +73,7 @@ def grant_invite_register_reward(inviter_id: int, invitee_id: int):
 @shared_task
 def check_first_deposit_reward(invitee_id: int):
     """Check and grant first-deposit reward to inviter."""
+    from django.db import transaction
     from apps.accounts.models import Invitation
     from apps.notifications.services import NotificationService
 
@@ -81,13 +86,22 @@ def check_first_deposit_reward(invitee_id: int):
     if not invitation:
         return
 
-    inviter = invitation.inviter
-    # Grant $0.50 bonus to inviter
-    inviter.balance += Decimal("0.50")
-    inviter.save(update_fields=["balance"])
+    with transaction.atomic():
+        # Re-check with lock to prevent double-reward under concurrent calls
+        invitation = Invitation.objects.select_for_update().get(id=invitation.id)
+        if invitation.first_deposit_rewarded:
+            return
 
-    invitation.first_deposit_rewarded = True
-    invitation.save(update_fields=["first_deposit_rewarded"])
+        from apps.payments.services import PaymentsService
+        inviter = User.objects.select_for_update().get(id=invitation.inviter_id)
+        PaymentsService.create_deposit(
+            inviter,
+            Decimal("0.50"),
+            reference_id=f"invite-deposit-reward:{invitation.id}",
+        )
+
+        invitation.first_deposit_rewarded = True
+        invitation.save(update_fields=["first_deposit_rewarded"])
 
     NotificationService.send(
         recipient=inviter,

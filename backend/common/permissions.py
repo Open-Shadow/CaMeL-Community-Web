@@ -68,8 +68,20 @@ def public_api(func):
 
 
 def login_required(func):
-    """Requires JWT login. Apply as ninja router auth=AuthBearer()."""
-    return func
+    """Requires JWT login.
+
+    Enforces that request.auth is a valid user object (not None / _ANONYMOUS).
+    Still apply auth=AuthBearer() on the router for Django Ninja to parse
+    the Authorization header.
+    """
+    from functools import wraps
+    @wraps(func)
+    def wrapper(request, *args, **kwargs):
+        user = getattr(request, 'auth', None)
+        if not user or user is _ANONYMOUS:
+            raise HttpError(401, "需要登录")
+        return func(request, *args, **kwargs)
+    return wrapper
 
 
 def moderator_required(func):
