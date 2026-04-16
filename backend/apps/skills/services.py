@@ -692,7 +692,10 @@ class SkillService:
         try:
             from apps.skills.package_service import PackageService
             version_obj.package_file.open('rb')
-            result = PackageService.process_upload(version_obj.package_file)
+            try:
+                result = PackageService.process_upload(version_obj.package_file)
+            finally:
+                version_obj.package_file.close()
             skill.readme_html = result.get("readme_html", skill.readme_html)
             # For new versions: apply creator-submitted deferred metadata.
             # For fallback promotions (pending_metadata == {}): restore metadata

@@ -101,6 +101,11 @@ def run_skill_scan(skill_id: int, version_id: int | None = None):
         issues.append(f"元数据校验失败：{e}")
     except Exception:
         warnings.append("元数据提取失败，请检查 SKILL.md 格式")
+    finally:
+        try:
+            scan_file.close()
+        except Exception:
+            pass
 
     if metadata_failed:
         passed = False

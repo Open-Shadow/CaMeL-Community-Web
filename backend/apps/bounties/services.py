@@ -82,16 +82,20 @@ class BountyService:
             accepted_application__isnull=False,
         ).select_related("accepted_application__applicant")
         for bounty in overdue_queryset:
-            applicant = bounty.accepted_application.applicant
-            if not CreditLog.objects.filter(
-                user=applicant,
-                action=CreditAction.BOUNTY_TIMEOUT,
-                reference_id=f"bounty-timeout:{bounty.id}",
-            ).exists():
-                CreditService.deduct_credit(applicant, CreditAction.BOUNTY_TIMEOUT, f"bounty-timeout:{bounty.id}")
-            bounty.accepted_application = None
-            bounty.status = BountyStatus.OPEN
-            bounty.save(update_fields=["accepted_application", "status"])
+            with transaction.atomic():
+                bounty = Bounty.objects.select_for_update().get(id=bounty.id)
+                if bounty.status not in [BountyStatus.IN_PROGRESS, BountyStatus.REVISION]:
+                    continue
+                applicant = bounty.accepted_application.applicant
+                if not CreditLog.objects.filter(
+                    user=applicant,
+                    action=CreditAction.BOUNTY_TIMEOUT,
+                    reference_id=f"bounty-timeout:{bounty.id}",
+                ).exists():
+                    CreditService.deduct_credit(applicant, CreditAction.BOUNTY_TIMEOUT, f"bounty-timeout:{bounty.id}")
+                bounty.accepted_application = None
+                bounty.status = BountyStatus.OPEN
+                bounty.save(update_fields=["accepted_application", "status"])
 
         with transaction.atomic():
             review_queryset = Bounty.objects.select_for_update().filter(
