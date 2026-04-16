@@ -52,15 +52,26 @@ def _handle_checkout_completed(session: dict):
 
     payment_intent = session.get("payment_intent", "")
 
-    # Prevent duplicate processing — skip empty payment_intent to avoid
-    # matching all transactions with blank stripe_payment_intent field.
+    # Dedup + deposit inside one atomic block to prevent concurrent
+    # Stripe webhook retries from crediting the user twice.
+    from django.db import transaction, IntegrityError
     from apps.payments.models import Transaction
-    if payment_intent and Transaction.objects.filter(stripe_payment_intent=payment_intent).exists():
-        return
 
-    TransactionService.record_deposit(
-        user, amount, stripe_payment_intent=payment_intent
-    )
+    try:
+        with transaction.atomic():
+            # Lock the user row to serialize concurrent webhook processing
+            locked_user = User.objects.select_for_update().get(id=user.id)
+
+            if payment_intent and Transaction.objects.filter(
+                stripe_payment_intent=payment_intent
+            ).exists():
+                return  # Already processed
+
+            TransactionService.record_deposit(
+                locked_user, amount, stripe_payment_intent=payment_intent
+            )
+    except IntegrityError:
+        return  # Concurrent insert — safe to ignore
 
     NotificationService.send(
         recipient=user,

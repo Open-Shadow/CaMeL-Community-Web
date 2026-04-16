@@ -239,17 +239,6 @@ def _comment_out(comment: Comment, user=None) -> dict:
     }
 
 
-# ─── Tip endpoints (from main) ────────────────────────────────────────────────
-
-@router.post("/articles/{article_id}/tip", response={200: dict, 400: dict}, auth=AuthBearer())
-def send_tip(request, article_id: int, payload: TipIn):
-    try:
-        tip = TipService.send_tip(request.auth, article_id, payload.amount)
-    except (ValueError, Exception) as exc:
-        return 400, {"message": str(exc)}
-    return {"id": tip.id, "amount": float(tip.amount)}
-
-
 @router.get("/articles/{article_id}/tips", response=list[TipOut])
 def get_article_tips(request, article_id: int, limit: int = 20):
     safe_limit = min(max(limit, 1), 50)
