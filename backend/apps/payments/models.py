@@ -34,4 +34,9 @@ class Transaction(models.Model):
                 condition=~models.Q(stripe_payment_intent=""),
                 name="unique_stripe_payment_intent",
             ),
+            models.UniqueConstraint(
+                fields=["reference_id"],
+                condition=models.Q(reference_id__startswith="stripe_session:"),
+                name="unique_stripe_session_reference",
+            ),
         ]

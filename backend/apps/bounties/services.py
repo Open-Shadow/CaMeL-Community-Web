@@ -170,6 +170,13 @@ class BountyService:
             reward=reward,
             deadline=deadline,
         )
+        # Update escrow transaction reference_id to use the actual bounty ID
+        from apps.payments.models import Transaction
+        Transaction.objects.filter(
+            user=creator,
+            reference_id=f"bounty:{creator.id}:{title}",
+            transaction_type="BOUNTY_ESCROW",
+        ).order_by("-created_at").update(reference_id=f"bounty:{bounty.id}:escrow")
         return bounty
 
     @classmethod
