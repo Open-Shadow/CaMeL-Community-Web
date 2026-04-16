@@ -426,8 +426,7 @@ class SkillService:
             skill.status = SkillStatus.APPROVED
             if live_version:
                 SkillService._promote_version(skill, live_version)
-            skill.save(update_fields=["status", "current_version", "package_file",
-                                      "package_sha256", "package_size", "readme_html", "updated_at"])
+            skill.save()
             SearchService.sync_skill(skill)
             cache.delete(SkillService.TRENDING_CACHE_KEY)
             return skill
@@ -443,8 +442,7 @@ class SkillService:
             try:
                 if not skill.current_version or PkgVersion(quarantined.version) > PkgVersion(skill.current_version):
                     SkillService._promote_version(skill, quarantined)
-                    skill.save(update_fields=["current_version", "package_file",
-                                              "package_sha256", "package_size", "readme_html", "updated_at"])
+                    skill.save()
             except Exception:
                 pass
         return skill
@@ -597,8 +595,7 @@ class SkillService:
             if is_version_update:
                 # Promote the approved version to live pointers
                 cls._promote_version(skill, latest_version)
-                skill.save(update_fields=["current_version", "package_file",
-                                          "package_sha256", "package_size", "readme_html", "updated_at"])
+                skill.save()
                 from apps.search.services import SearchService
                 SearchService.sync_skill(skill)
                 NotificationService.send(
@@ -694,7 +691,7 @@ class SkillService:
         # Re-render readme and extract metadata from the package
         try:
             from apps.skills.package_service import PackageService
-            version_obj.package_file.seek(0)
+            version_obj.package_file.open('rb')
             result = PackageService.process_upload(version_obj.package_file)
             skill.readme_html = result.get("readme_html", skill.readme_html)
             # For new versions: apply creator-submitted deferred metadata.
@@ -749,8 +746,7 @@ class SkillService:
             pending.status = VersionStatus.APPROVED
             pending.save(update_fields=["status"])
             cls._promote_version(skill, pending)
-            skill.save(update_fields=["current_version", "package_file",
-                                      "package_sha256", "package_size", "readme_html", "updated_at"])
+            skill.save()
             SearchService.sync_skill(skill)
             NotificationService.send(
                 recipient=skill.creator,
@@ -1324,8 +1320,7 @@ class SkillReportService:
                 if fallback:
                     # Promote the latest safe version to live pointers
                     SkillService._promote_version(skill, fallback)
-                    skill.save(update_fields=["current_version", "package_file",
-                                              "package_sha256", "package_size", "readme_html", "updated_at"])
+                    skill.save()
                     from apps.search.services import SearchService
                     SearchService.sync_skill(skill)
                 else:

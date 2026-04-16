@@ -73,12 +73,15 @@ def _handle_checkout_completed(session: dict):
     except IntegrityError:
         return  # Concurrent insert — safe to ignore
 
-    NotificationService.send(
-        recipient=user,
-        notification_type="deposit",
-        title="充值成功",
-        content=f"${amount} 已到账",
-    )
+    try:
+        NotificationService.send(
+            recipient=user,
+            notification_type="deposit",
+            title="充值成功",
+            content=f"${amount} 已到账",
+        )
+    except Exception:
+        pass  # Deposit succeeded; notification failure should not trigger Stripe retry
 
     # Check first-deposit invite reward
     if user.invited_by_id:

@@ -93,13 +93,14 @@ class BountyService:
             bounty.status = BountyStatus.OPEN
             bounty.save(update_fields=["accepted_application", "status"])
 
-        review_queryset = Bounty.objects.filter(
-            status__in=[BountyStatus.DELIVERED, BountyStatus.IN_REVIEW],
-        )
-        for bounty in review_queryset:
-            latest_delivery = bounty.deliverables.order_by("-created_at").first()
-            if latest_delivery and latest_delivery.created_at <= now - timedelta(days=7):
-                cls.approve_delivery(bounty.creator, bounty)
+        with transaction.atomic():
+            review_queryset = Bounty.objects.select_for_update().filter(
+                status__in=[BountyStatus.DELIVERED, BountyStatus.IN_REVIEW],
+            ).select_related("creator", "accepted_application__applicant")
+            for bounty in review_queryset:
+                latest_delivery = bounty.deliverables.order_by("-created_at").first()
+                if latest_delivery and latest_delivery.created_at <= now - timedelta(days=7):
+                    cls.approve_delivery(bounty.creator, bounty)
 
     @classmethod
     @transaction.atomic
