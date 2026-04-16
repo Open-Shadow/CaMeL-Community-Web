@@ -192,15 +192,26 @@ class ArticleService:
 
     @staticmethod
     def _sanitize_content(content: str) -> str:
-        sanitized = re.sub(
-            r"<\s*(script|style|iframe|object|embed)[^>]*>.*?<\s*/\s*\1\s*>",
-            "",
+        import nh3
+        return nh3.clean(
             content,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        sanitized = re.sub(r"\son[a-zA-Z]+\s*=\s*(['\"]).*?\1", "", sanitized)
-        sanitized = re.sub(r"javascript:", "", sanitized, flags=re.IGNORECASE)
-        return sanitized.strip()
+            tags={
+                "p", "br", "strong", "em", "u", "s", "del", "ins",
+                "h1", "h2", "h3", "h4", "h5", "h6",
+                "ul", "ol", "li", "blockquote", "pre", "code",
+                "a", "img", "table", "thead", "tbody", "tr", "th", "td",
+                "hr", "span", "div",
+            },
+            attributes={
+                "a": {"href", "title", "target"},
+                "img": {"src", "alt", "title", "width", "height"},
+                "code": {"class"},
+                "span": {"class"},
+                "div": {"class"},
+                "td": {"colspan", "rowspan"},
+                "th": {"colspan", "rowspan"},
+            },
+        ).strip()
 
     @classmethod
     def _validate_related_skill(cls, author, related_skill_id: int | None) -> Skill | None:

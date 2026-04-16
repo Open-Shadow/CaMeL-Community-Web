@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { api } from '@/hooks/use-auth';
+import { api, useAuth } from '@/hooks/use-auth';
 
 interface Balance {
   balance: number;
@@ -40,6 +40,11 @@ const QUICK_AMOUNTS = [5, 10, 20, 50, 100];
 export function WalletPage() {
   const [searchParams] = useSearchParams();
   const status = searchParams.get('status');
+  const navigate = useNavigate();
+  const { isAuthenticated, isLoading } = useAuth();
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) navigate('/login');
+  }, [isAuthenticated, isLoading, navigate]);
 
   const [balance, setBalance] = useState<Balance | null>(null);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
