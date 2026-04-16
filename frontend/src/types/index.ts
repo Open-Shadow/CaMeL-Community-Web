@@ -2,20 +2,27 @@ export interface User {
   id: number
   username: string
   email: string
-  creditScore: number
-  avatarUrl?: string
-  createdAt: string
+  credit_score: number
+  avatar_url: string
+  display_name: string
+  level: string
+  role: string
+  created_at: string
 }
 
 export interface Skill {
   id: number
   name: string
+  slug: string
   description: string
-  price: number
-  author: User
-  rating: number
-  callCount: number
-  createdAt: string
+  category: string
+  price: number | null
+  pricing_model: string
+  creator_id: number
+  creator_name: string
+  total_calls: number
+  avg_rating: number
+  created_at: string
 }
 
 export interface Bounty {
@@ -23,10 +30,10 @@ export interface Bounty {
   title: string
   description: string
   reward: number
-  status: 'open' | 'in_progress' | 'completed' | 'cancelled'
-  author: User
-  createdAt: string
-  deadline?: string
+  status: string
+  creator: User
+  created_at: string
+  deadline: string
 }
 
 export interface Article {
@@ -34,8 +41,8 @@ export interface Article {
   title: string
   content: string
   author: User
-  voteCount: number
-  createdAt: string
+  net_votes: number
+  created_at: string
 }
 
 export type CreditTier = {

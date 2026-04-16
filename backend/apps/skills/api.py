@@ -150,7 +150,8 @@ def get_my_skills(request):
 
 @router.get("/trending/list", response=List[SkillTrendingOut])
 def list_trending_skills(request, limit: int = 10):
-    skills = SkillService.list_trending(limit=limit)
+    safe_limit = min(max(limit, 1), 50)
+    skills = SkillService.list_trending(limit=safe_limit)
     return [
         {
             "id": skill.id,
@@ -339,8 +340,8 @@ def download_skill(request, skill_id: int, version: Optional[str] = None):
     from apps.skills.package_service import PackageService
     url = PackageService.generate_download_url(package_file.name)
 
-    skill.download_count += 1
-    skill.save(update_fields=["download_count"])
+    from django.db.models import F
+    Skill.objects.filter(id=skill.id).update(download_count=F("download_count") + 1)
 
     return {"url": url}
 

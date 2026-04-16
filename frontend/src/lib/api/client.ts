@@ -18,8 +18,8 @@ import { api } from '@/hooks/use-auth';
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
-  page: number;
-  page_size: number;
+  limit: number;
+  offset: number;
 }
 
 export interface MessageResponse {
@@ -217,6 +217,7 @@ export interface Notification {
   content: string;
   is_read: boolean;
   created_at: string;
+  reference_id: string;
 }
 
 // =============================================================================
@@ -286,7 +287,7 @@ export const rankingsApi = {
 
 export const notificationsApi = {
   list: (params?: { limit?: number; offset?: number; unread_only?: boolean }) =>
-    api.get<Notification[]>('/notifications/', { params }),
+    api.get<PaginatedResponse<Notification> & { unread_count: number }>('/notifications/', { params }),
   markRead: (id: number) =>
     api.post<MessageResponse>(`/notifications/${id}/read`),
   markAllRead: () =>

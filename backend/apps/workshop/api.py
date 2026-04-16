@@ -241,15 +241,19 @@ def _comment_out(comment: Comment, user=None) -> dict:
 
 # ─── Tip endpoints (from main) ────────────────────────────────────────────────
 
-@router.post("/articles/{article_id}/tip", auth=AuthBearer())
+@router.post("/articles/{article_id}/tip", response={200: dict, 400: dict}, auth=AuthBearer())
 def send_tip(request, article_id: int, payload: TipIn):
-    tip = TipService.send_tip(request.auth, article_id, payload.amount)
+    try:
+        tip = TipService.send_tip(request.auth, article_id, payload.amount)
+    except (ValueError, Exception) as exc:
+        return 400, {"message": str(exc)}
     return {"id": tip.id, "amount": float(tip.amount)}
 
 
 @router.get("/articles/{article_id}/tips", response=list[TipOut])
 def get_article_tips(request, article_id: int, limit: int = 20):
-    tips = TipService.get_article_tips(article_id, limit)
+    safe_limit = min(max(limit, 1), 50)
+    tips = TipService.get_article_tips(article_id, safe_limit)
     return [
         TipOut(
             id=t.id,
