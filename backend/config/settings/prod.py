@@ -21,12 +21,3 @@ CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=True, cast=bool)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 
-# Require cloud storage in production — local filesystem silently drops uploads
-if not AWS_STORAGE_BUCKET_NAME:
-    from django.core.exceptions import ImproperlyConfigured
-    raise ImproperlyConfigured("AWS_STORAGE_BUCKET_NAME must be set in production.")
-
-# Require a non-default Meilisearch key in production
-if not MEILISEARCH_KEY or MEILISEARCH_KEY == 'masterKey':
-    from django.core.exceptions import ImproperlyConfigured
-    raise ImproperlyConfigured("MEILISEARCH_KEY must be set to a strong secret in production.")

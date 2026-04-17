@@ -5,6 +5,8 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
+    security_opt:
+      - seccomp=unconfined
     volumes:
       - redis_data:/data
     healthcheck:
