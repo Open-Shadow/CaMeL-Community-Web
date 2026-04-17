@@ -87,15 +87,15 @@ export function Header() {
           <button
             type="button"
             onClick={cycleTheme}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded-md border p-2 text-foreground transition-colors hover:bg-muted"
             title={theme === 'light' ? '切换到暗色' : theme === 'dark' ? '跟随系统' : '切换到亮色'}
           >
             {theme === 'light' ? (
-              <Sun className="h-4 w-4" />
+              <Sun className="h-5 w-5" />
             ) : theme === 'dark' ? (
-              <Moon className="h-4 w-4" />
+              <Moon className="h-5 w-5" />
             ) : (
-              <Monitor className="h-4 w-4" />
+              <Monitor className="h-5 w-5" />
             )}
           </button>
 
