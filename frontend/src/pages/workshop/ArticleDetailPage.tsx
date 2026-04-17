@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Eye, Link2, Sparkles } from 'lucide-react'
+import { Download, Eye, Link2, Sparkles } from 'lucide-react'
 
 import { EmptyState } from '@/components/shared/empty-state'
 import { DetailSkeleton } from '@/components/shared/loading-skeleton'
@@ -29,6 +29,7 @@ import {
   type RecommendedArticle,
 } from '@/lib/workshop'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { htmlToMarkdown, downloadMarkdown } from '@/lib/markdown'
 
 const DIFFICULTY_LABELS: Record<ArticleDetail['difficulty'], string> = {
   BEGINNER: '入门',
@@ -134,33 +135,47 @@ export default function ArticleDetailPage() {
         <Button variant="ghost" onClick={() => navigate('/workshop')}>
           ← 返回工坊
         </Button>
-        {canManage && article.status === 'DRAFT' ? (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate(`/workshop/${article.id}/edit`)}>
-              编辑草稿
-            </Button>
-            <Button
-              disabled={publishing}
-              onClick={async () => {
-                setPublishing(true)
-                try {
-                  const published = await publishArticle(article.id)
-                  setArticle(published)
-                } catch (err: any) {
-                  setError(err.response?.data?.detail || '发布失败')
-                } finally {
-                  setPublishing(false)
-                }
-              }}
-            >
-              {publishing ? '发布中...' : '发布文章'}
-            </Button>
-          </div>
-        ) : canManage ? (
-          <Button variant="outline" onClick={() => navigate(`/workshop/${article.id}/edit`)}>
-            编辑文章
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const md = htmlToMarkdown(article.content)
+              const slug = article.slug || `article-${article.id}`
+              downloadMarkdown(md, `${slug}.md`)
+            }}
+          >
+            <Download className="mr-1 h-4 w-4" />
+            导出 MD
           </Button>
-        ) : null}
+          {canManage && article.status === 'DRAFT' ? (
+            <>
+              <Button variant="outline" onClick={() => navigate(`/workshop/${article.id}/edit`)}>
+                编辑草稿
+              </Button>
+              <Button
+                disabled={publishing}
+                onClick={async () => {
+                  setPublishing(true)
+                  try {
+                    const published = await publishArticle(article.id)
+                    setArticle(published)
+                  } catch (err: any) {
+                    setError(err.response?.data?.detail || '发布失败')
+                  } finally {
+                    setPublishing(false)
+                  }
+                }}
+              >
+                {publishing ? '发布中...' : '发布文章'}
+              </Button>
+            </>
+          ) : canManage ? (
+            <Button variant="outline" onClick={() => navigate(`/workshop/${article.id}/edit`)}>
+              编辑文章
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.7fr]">

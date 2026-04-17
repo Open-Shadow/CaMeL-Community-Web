@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Upload } from 'lucide-react'
 
 import { TagInput } from '@/components/shared/tag-input'
 import { ArticleEditor } from '@/components/workshop/ArticleEditor'
@@ -11,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
 import { getMySkills, type SkillSummary } from '@/lib/skills'
 import { getArticle, updateArticle, publishArticle, type ArticleDetail } from '@/lib/workshop'
+import { markdownToHtml, readMarkdownFile } from '@/lib/markdown'
 
 export default function EditArticlePage() {
   const navigate = useNavigate()
@@ -30,6 +32,20 @@ export default function EditArticlePage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImportMd = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const md = await readMarkdownFile(file)
+      const html = markdownToHtml(md)
+      set('content', html)
+    } catch {
+      setError('Markdown 文件读取失败')
+    }
+    e.target.value = ''
+  }
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -213,7 +229,27 @@ export default function EditArticlePage() {
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium">正文</label>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="block text-sm font-medium">正文</label>
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".md,.markdown,text/markdown"
+                      className="hidden"
+                      onChange={handleImportMd}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="mr-1 h-4 w-4" />
+                      导入 MD
+                    </Button>
+                  </div>
+                </div>
                 <ArticleEditor value={form.content} onChange={(value) => set('content', value)} />
               </div>
             </CardContent>
