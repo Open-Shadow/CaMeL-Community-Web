@@ -275,11 +275,8 @@ class ArticleService:
         plain_text = re.sub(r"\s+", " ", strip_tags(sanitized_content)).strip()
 
         if publishing:
-            if len(plain_text) < 500:
-                raise ValueError("发布文章前请补充到至少 500 个字符")
-            required_sections = ("问题", "方案", "效果")
-            if any(section not in plain_text for section in required_sections):
-                raise ValueError("文章需包含「问题 / 方案 / 效果」三个核心部分")
+            if len(plain_text) < 10:
+                raise ValueError("发布文章内容不能为空")
             if not model_tags:
                 raise ValueError("发布文章前至少选择 1 个模型标签")
 

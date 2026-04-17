@@ -135,21 +135,30 @@ export default function ArticleDetailPage() {
           ← 返回工坊
         </Button>
         {canManage && article.status === 'DRAFT' ? (
-          <Button
-            disabled={publishing}
-            onClick={async () => {
-              setPublishing(true)
-              try {
-                const published = await publishArticle(article.id)
-                setArticle(published)
-              } catch (err: any) {
-                setError(err.response?.data?.detail || '发布失败')
-              } finally {
-                setPublishing(false)
-              }
-            }}
-          >
-            {publishing ? '发布中...' : '发布文章'}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(`/workshop/${article.id}/edit`)}>
+              编辑草稿
+            </Button>
+            <Button
+              disabled={publishing}
+              onClick={async () => {
+                setPublishing(true)
+                try {
+                  const published = await publishArticle(article.id)
+                  setArticle(published)
+                } catch (err: any) {
+                  setError(err.response?.data?.detail || '发布失败')
+                } finally {
+                  setPublishing(false)
+                }
+              }}
+            >
+              {publishing ? '发布中...' : '发布文章'}
+            </Button>
+          </div>
+        ) : canManage ? (
+          <Button variant="outline" onClick={() => navigate(`/workshop/${article.id}/edit`)}>
+            编辑文章
           </Button>
         ) : null}
       </div>
@@ -350,11 +359,11 @@ export default function ArticleDetailPage() {
                 <Button type="button" className="w-full" variant="outline" onClick={() => setTipOpen(true)}>
                   打赏作者
                 </Button>
-              ) : (
+              ) : !isAuthenticated ? (
                 <Button type="button" className="w-full" variant="outline" disabled>
                   打赏功能需登录
                 </Button>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </aside>

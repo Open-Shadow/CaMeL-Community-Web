@@ -19,6 +19,7 @@ import BountyDetailPage from '@/pages/bounty/BountyDetailPage'
 import CreateBountyPage from '@/pages/bounty/CreateBountyPage'
 import WorkshopPage from '@/pages/workshop/WorkshopPage'
 import ArticleDetailPage from '@/pages/workshop/ArticleDetailPage'
+import EditArticlePage from '@/pages/workshop/EditArticlePage'
 import CreateArticlePage from '@/pages/workshop/CreateArticlePage'
 import TipLeaderboardPage from '@/pages/workshop/TipLeaderboardPage'
 import SeriesDetailPage from '@/pages/workshop/SeriesDetailPage'
@@ -64,6 +65,7 @@ export const router = createBrowserRouter([
       { path: 'bounty/:id', element: <BountyDetailPage /> },
       { path: 'workshop', element: <WorkshopPage /> },
       { path: 'workshop/create', element: <CreateArticlePage /> },
+      { path: 'workshop/:id/edit', element: <EditArticlePage /> },
       { path: 'workshop/series/:id', element: <SeriesDetailPage /> },
       { path: 'workshop/:id', element: <ArticleDetailPage /> },
       { path: 'workshop/tips/leaderboard', element: <TipLeaderboardPage /> },

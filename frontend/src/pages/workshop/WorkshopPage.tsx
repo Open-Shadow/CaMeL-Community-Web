@@ -236,7 +236,7 @@ export default function WorkshopPage() {
               <ArticleCard
                 key={article.id}
                 article={article}
-                onClick={() => navigate(`/workshop/${article.id}`)}
+                onClick={() => navigate(`/workshop/${article.id}/edit`)}
               />
             ))}
           </div>

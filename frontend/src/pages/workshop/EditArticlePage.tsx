@@ -1,28 +1,33 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { TagInput } from '@/components/shared/tag-input'
-import { ArticleEditor, DEFAULT_ARTICLE_TEMPLATE } from '@/components/workshop/ArticleEditor'
+import { ArticleEditor } from '@/components/workshop/ArticleEditor'
+import { DetailSkeleton } from '@/components/shared/loading-skeleton'
+import { EmptyState } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/use-auth'
 import { getMySkills, type SkillSummary } from '@/lib/skills'
-import { createArticle, publishArticle } from '@/lib/workshop'
+import { getArticle, updateArticle, publishArticle, type ArticleDetail } from '@/lib/workshop'
 
-export default function CreateArticlePage() {
+export default function EditArticlePage() {
   const navigate = useNavigate()
-  const { isAuthenticated, isLoading } = useAuth()
+  const { id } = useParams()
+  const { isAuthenticated, isLoading, user } = useAuth()
   const [skills, setSkills] = useState<SkillSummary[]>([])
+  const [article, setArticle] = useState<ArticleDetail | null>(null)
   const [form, setForm] = useState({
     title: '',
     difficulty: 'BEGINNER',
     article_type: 'TUTORIAL',
-    model_tags: ['Claude Code'],
+    model_tags: [] as string[],
     custom_tags: [] as string[],
     related_skill_id: '',
-    content: DEFAULT_ARTICLE_TEMPLATE,
+    content: '',
   })
+  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -31,6 +36,38 @@ export default function CreateArticlePage() {
       navigate('/login')
     }
   }, [isAuthenticated, isLoading, navigate])
+
+  useEffect(() => {
+    if (!id || !isAuthenticated) return
+    let active = true
+
+    const fetchArticle = async () => {
+      setLoading(true)
+      try {
+        const data = await getArticle(Number(id))
+        if (!active) return
+        setArticle(data)
+        setForm({
+          title: data.title,
+          difficulty: data.difficulty,
+          article_type: data.article_type,
+          model_tags: data.model_tags,
+          custom_tags: data.custom_tags,
+          related_skill_id: data.related_skill?.id?.toString() || '',
+          content: data.content,
+        })
+      } catch (err: any) {
+        if (active) setError(err.response?.data?.detail || '文章加载失败')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    fetchArticle()
+    return () => {
+      active = false
+    }
+  }, [id, isAuthenticated])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -55,14 +92,14 @@ export default function CreateArticlePage() {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
-  const handleSubmit = async (e: React.FormEvent, publishImmediately: boolean) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title || !form.content) return
+    if (!id || !form.title) return
 
     setSubmitting(true)
     setError('')
     try {
-      const article = await createArticle({
+      const updated = await updateArticle(Number(id), {
         title: form.title,
         content: form.content,
         difficulty: form.difficulty as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED',
@@ -71,30 +108,95 @@ export default function CreateArticlePage() {
         custom_tags: form.custom_tags,
         related_skill_id: form.related_skill_id ? Number(form.related_skill_id) : null,
       })
-
-      const finalArticle = publishImmediately ? await publishArticle(article.id) : article
-      navigate(`/workshop/${finalArticle.id}`)
+      setArticle(updated)
+      navigate(`/workshop/${updated.id}`)
     } catch (err: any) {
-      setError(err.response?.data?.detail || '文章创建失败')
+      setError(err.response?.data?.detail || '保存失败')
     } finally {
       setSubmitting(false)
     }
   }
 
+  const handlePublish = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!id || !form.title) return
+
+    setSubmitting(true)
+    setError('')
+    try {
+      await updateArticle(Number(id), {
+        title: form.title,
+        content: form.content,
+        difficulty: form.difficulty as 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED',
+        article_type: form.article_type as 'TUTORIAL' | 'CASE_STUDY' | 'PITFALL' | 'REVIEW' | 'DISCUSSION',
+        model_tags: form.model_tags,
+        custom_tags: form.custom_tags,
+        related_skill_id: form.related_skill_id ? Number(form.related_skill_id) : null,
+      })
+      const published = await publishArticle(Number(id))
+      navigate(`/workshop/${published.id}`)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || '发布失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <DetailSkeleton />
+      </div>
+    )
+  }
+
+  if (error && !article) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <EmptyState
+          title="无法加载文章"
+          description={error}
+          action={
+            <Button variant="outline" onClick={() => navigate('/workshop')}>
+              返回工坊
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+
+  if (article && user && article.author.id !== user.id) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <EmptyState
+          title="无权编辑"
+          description="只能编辑自己的文章"
+          action={
+            <Button variant="outline" onClick={() => navigate('/workshop')}>
+              返回工坊
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+
+  const isDraft = article?.status === 'DRAFT'
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <Button variant="ghost" onClick={() => navigate('/workshop')}>
-          ← 返回工坊
+        <Button variant="ghost" onClick={() => navigate(`/workshop/${id}`)}>
+          ← 返回文章
         </Button>
-        <div className="text-sm text-muted-foreground">建议先存草稿，再检查结构与标签后发布</div>
+        <div className="text-sm text-muted-foreground">
+          {isDraft ? '编辑草稿，保存后可发布' : '编辑已发布文章'}
+        </div>
       </div>
 
       <div className="mb-8 max-w-3xl space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">写一篇可复用的解决方案文章</h1>
-        <p className="text-sm leading-6 text-slate-600">
-          Phase 1 的文章围绕 Problem / Solution / Result 三段展开，但不做强制校验。发布前需填写标题和至少 1 个模型标签。
-        </p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">编辑文章</h1>
       </div>
 
       <form className="grid gap-6 lg:grid-cols-[1.6fr_0.8fr]">
@@ -192,17 +294,19 @@ export default function CreateArticlePage() {
                   type="submit"
                   variant="outline"
                   disabled={submitting}
-                  onClick={(event) => handleSubmit(event, false)}
+                  onClick={handleSave}
                 >
-                  {submitting ? '处理中...' : '保存草稿'}
+                  {submitting ? '处理中...' : '保存'}
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={submitting}
-                  onClick={(event) => handleSubmit(event, true)}
-                >
-                  {submitting ? '处理中...' : '创建并发布'}
-                </Button>
+                {isDraft ? (
+                  <Button
+                    type="submit"
+                    disabled={submitting}
+                    onClick={handlePublish}
+                  >
+                    {submitting ? '处理中...' : '保存并发布'}
+                  </Button>
+                ) : null}
               </div>
             </CardContent>
           </Card>
