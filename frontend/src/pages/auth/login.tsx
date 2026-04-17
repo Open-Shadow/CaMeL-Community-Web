@@ -27,7 +27,17 @@ export function LoginPage() {
       await login(email, password);
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.message || '登录失败');
+      if (err.code === 'ECONNABORTED') {
+        setError('登录请求超时，请稍后重试');
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.response?.status) {
+        setError(`登录失败 (${err.response.status})，请稍后重试`);
+      } else if (err.request) {
+        setError('无法连接到服务器，请检查网络连接');
+      } else {
+        setError('登录失败，请稍后重试');
+      }
     } finally {
       setIsLoading(false);
     }

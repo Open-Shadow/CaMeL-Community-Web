@@ -91,8 +91,14 @@ export function RegisterPage() {
     } catch (err: any) {
       if (err.code === 'ECONNABORTED') {
         setError('注册请求超时，请检查后端服务和邮件配置后重试');
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.response?.status) {
+        setError(`注册失败 (${err.response.status})，请稍后重试`);
+      } else if (err.request) {
+        setError('无法连接到服务器，请检查网络连接');
       } else {
-        setError(err.response?.data?.message || '注册失败');
+        setError('注册失败，请稍后重试');
       }
     } finally {
       setIsLoading(false);

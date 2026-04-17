@@ -23,7 +23,17 @@ export function ForgotPasswordPage() {
       await requestPasswordReset(email)
       setMessage('如果该邮箱已注册，我们已发送重置密码邮件。')
     } catch (err: any) {
-      setError(err.response?.data?.message || '发送重置邮件失败')
+      if (err.code === 'ECONNABORTED') {
+        setError('请求超时，请稍后重试')
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message)
+      } else if (err.response?.status) {
+        setError(`发送失败 (${err.response.status})，请稍后重试`)
+      } else if (err.request) {
+        setError('无法连接到服务器，请检查网络连接')
+      } else {
+        setError('发送重置邮件失败，请稍后重试')
+      }
     } finally {
       setIsLoading(false)
     }
