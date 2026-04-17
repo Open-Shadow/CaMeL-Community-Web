@@ -4,11 +4,14 @@ import { useNavigate } from 'react-router-dom'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ArticleCardSkeleton } from '@/components/shared/loading-skeleton'
 import ArticleCard from '@/components/workshop/ArticleCard'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useAuth } from '@/hooks/use-auth'
 import {
   listArticles,
   listFeaturedArticles,
+  listMyArticles,
   searchArticles,
   type ArticleSummary,
 } from '@/lib/workshop'
@@ -39,6 +42,7 @@ const MODEL_TAGS = ['Claude Code', 'Claude Sonnet 4', 'Claude Opus 4', 'GPT-5', 
 
 export default function WorkshopPage() {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   const [q, setQ] = useState('')
   const [difficulty, setDifficulty] = useState<ArticleSummary['difficulty'] | ''>('')
   const [articleType, setArticleType] = useState<ArticleSummary['article_type'] | ''>('')
@@ -46,6 +50,7 @@ export default function WorkshopPage() {
   const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number]['value']>('latest')
   const [articles, setArticles] = useState<ArticleSummary[]>([])
   const [featuredArticles, setFeaturedArticles] = useState<ArticleSummary[]>([])
+  const [myDrafts, setMyDrafts] = useState<ArticleSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -69,6 +74,28 @@ export default function WorkshopPage() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setMyDrafts([])
+      return
+    }
+    let active = true
+
+    const fetchDrafts = async () => {
+      try {
+        const data = await listMyArticles('DRAFT')
+        if (active) setMyDrafts(data)
+      } catch {
+        if (active) setMyDrafts([])
+      }
+    }
+
+    fetchDrafts()
+    return () => {
+      active = false
+    }
+  }, [isAuthenticated])
 
   useEffect(() => {
     let active = true
@@ -194,6 +221,27 @@ export default function WorkshopPage() {
           ))}
         </div>
       </section>
+
+      {myDrafts.length > 0 ? (
+        <section className="mb-8 space-y-4 rounded-3xl border border-amber-200 bg-amber-50/50 p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">我的草稿</h2>
+              <Badge variant="secondary">{myDrafts.length}</Badge>
+            </div>
+            <span className="text-sm text-muted-foreground">点击草稿可继续编辑或发布</span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {myDrafts.map((article) => (
+              <ArticleCard
+                key={article.id}
+                article={article}
+                onClick={() => navigate(`/workshop/${article.id}`)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {featuredArticles.length > 0 && !deferredQuery ? (
         <section className="mb-8 space-y-4">
