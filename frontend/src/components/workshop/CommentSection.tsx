@@ -68,7 +68,7 @@ export function CommentSection({
 
   return (
     <div className="space-y-5">
-      <div className="space-y-3 rounded-2xl border bg-white p-4">
+      <div className="space-y-3 rounded-2xl border bg-card p-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">评论区</h3>
           <span className="text-sm text-muted-foreground">{comments.length} 条主评论</span>
@@ -192,7 +192,7 @@ export function CommentSection({
               {comment.replies.length > 0 ? (
                 <div className="space-y-3 rounded-xl bg-muted p-4">
                   {comment.replies.map((reply) => (
-                    <div key={reply.id} className="rounded-lg border bg-white p-3">
+                    <div key={reply.id} className="rounded-lg border bg-card p-3">
                       <div className="mb-1 text-sm font-medium text-foreground">
                         {reply.author.display_name}
                       </div>

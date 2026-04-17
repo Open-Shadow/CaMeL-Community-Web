@@ -12,7 +12,7 @@ interface VoteButtonsProps {
 
 export function VoteButtons({ netVotes, myVote, disabled = false, onVote, onRemove }: VoteButtonsProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white p-3">
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-card p-3">
       <Button
         type="button"
         variant={myVote === 'UP' ? 'default' : 'outline'}

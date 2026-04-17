@@ -174,7 +174,7 @@ export default function SkillDetailPage() {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_360px]">
         <div className="space-y-6">
-          <section className="rounded-2xl border bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <div className="mb-2 flex flex-wrap gap-2">
               {skill.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}
               <Badge variant={STATUS_BADGE[skill.status] || 'outline'}>

@@ -1,4 +1,4 @@
-import { LogOut, Settings, User as UserIcon, Bell, Shield, Menu, X } from 'lucide-react';
+import { LogOut, Settings, User as UserIcon, Bell, Shield, Menu, X, Sun, Moon, Monitor } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth'
+import { useTheme } from '@/hooks/use-theme'
 import { cn, getInitials } from '@/lib/utils';
 
 const NAV_LINKS = [
@@ -26,6 +27,7 @@ const NAV_LINKS = [
 export function Header() {
   const navigate = useNavigate()
   const { isAuthenticated, isLoading, logout, user } = useAuth()
+  const { theme, setTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
@@ -33,8 +35,13 @@ export function Header() {
     navigate('/')
   }
 
+  const cycleTheme = () => {
+    const next = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light'
+    setTheme(next)
+  }
+
   return (
-    <header className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-lg">
+    <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
@@ -77,6 +84,21 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={cycleTheme}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title={theme === 'light' ? '切换到暗色' : theme === 'dark' ? '跟随系统' : '切换到亮色'}
+          >
+            {theme === 'light' ? (
+              <Sun className="h-4 w-4" />
+            ) : theme === 'dark' ? (
+              <Moon className="h-4 w-4" />
+            ) : (
+              <Monitor className="h-4 w-4" />
+            )}
+          </button>
+
           {isLoading ? (
             <div className="h-8 w-20 animate-pulse rounded-md bg-muted" />
           ) : isAuthenticated && user ? (
@@ -166,7 +188,7 @@ export function Header() {
       </div>
 
       {mobileMenuOpen && (
-        <nav className="border-t bg-white px-4 py-3 md:hidden">
+        <nav className="border-t bg-background px-4 py-3 md:hidden">
           <div className="flex flex-col gap-1">
             {NAV_LINKS.map((link) => (
               <NavLink

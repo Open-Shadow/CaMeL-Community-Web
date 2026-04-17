@@ -63,7 +63,7 @@ export function CreditHistoryList({
           <div
             key={item.id}
             className={cn(
-              'rounded-2xl border bg-white px-4 py-4 shadow-sm',
+              'rounded-2xl border bg-card px-4 py-4 shadow-sm',
               compact ? 'py-3' : 'py-4'
             )}
           >

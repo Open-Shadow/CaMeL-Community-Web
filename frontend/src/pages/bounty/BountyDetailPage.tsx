@@ -110,7 +110,7 @@ export default function BountyDetailPage() {
         <Badge variant="outline">{data.status}</Badge>
       </div>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">{data.title}</h1>
           <span className="text-xl font-semibold text-primary">{formatCurrency(data.reward)}</span>

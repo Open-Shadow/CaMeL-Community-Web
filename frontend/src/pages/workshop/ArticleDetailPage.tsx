@@ -186,7 +186,7 @@ export default function ArticleDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.7fr]">
         <div className="space-y-6">
-          <section className="rounded-2xl border bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <Badge variant="secondary">{DIFFICULTY_LABELS[article.difficulty]}</Badge>
               <Badge variant="outline">{TYPE_LABELS[article.article_type]}</Badge>
@@ -234,7 +234,7 @@ export default function ArticleDetailPage() {
 
           </section>
 
-          <section className="rounded-2xl border bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <ArticleRenderer content={article.content} />
           </section>
 

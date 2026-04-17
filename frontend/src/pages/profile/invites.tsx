@@ -106,7 +106,7 @@ export function ProfileInvitesPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-          <Card className="border-border bg-white shadow-sm">
+          <Card className="border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle>当前邀请码</CardTitle>
               <CardDescription>分享后首位成功注册者会消耗这张邀请码</CardDescription>
@@ -121,7 +121,7 @@ export function ProfileInvitesPage() {
 
               <div className="flex flex-col gap-3 md:flex-row">
                 <div className="flex-1">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">分享链接</label>
+                  <label className="mb-2 block text-sm font-medium text-foreground">分享链接</label>
                   <Input value={shareLink} readOnly />
                 </div>
                 <div className="flex gap-2 md:items-end">
@@ -148,7 +148,7 @@ export function ProfileInvitesPage() {
           </div>
         </div>
 
-        <Card className="mt-6 border-border bg-white shadow-sm">
+        <Card className="mt-6 border-border bg-card shadow-sm">
           <CardHeader>
             <CardTitle>最近邀请</CardTitle>
             <CardDescription>
@@ -212,14 +212,14 @@ function StatCard({
   help: string;
 }) {
   return (
-    <Card className="border-border bg-white shadow-sm">
+    <Card className="border-border bg-card shadow-sm">
       <CardContent className="flex items-start justify-between p-5">
         <div>
           <div className="text-sm text-muted-foreground">{label}</div>
           <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
           <div className="mt-1 text-xs text-muted-foreground">{help}</div>
         </div>
-        <div className="rounded-full bg-slate-100 p-2 text-slate-700">{icon}</div>
+        <div className="rounded-full bg-muted p-2 text-muted-foreground">{icon}</div>
       </CardContent>
     </Card>
   );
