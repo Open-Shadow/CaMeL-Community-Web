@@ -67,14 +67,14 @@ export default function AdminPage() {
       value: data ? `$${data.total_deposits.toFixed(2)}` : '--',
       sub: '',
       icon: DollarSign,
-      color: 'text-emerald-600',
+      color: 'text-primary',
     },
     {
       title: '平台手续费',
       value: data ? `$${data.total_fees.toFixed(2)}` : '--',
       sub: '',
       icon: DollarSign,
-      color: 'text-amber-600',
+      color: 'text-primary',
     },
     {
       title: '今日新增',

@@ -26,18 +26,17 @@ const NAV_ITEMS = [
 export function AdminLayout() {
   const { user, isAuthenticated } = useAuth();
 
-  // Route guard: require admin role
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
   if (user?.role !== 'ADMIN' && user?.role !== 'MODERATOR') {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center space-y-4">
-          <ShieldAlert className="h-16 w-16 mx-auto text-muted-foreground" />
-          <h1 className="text-2xl font-bold">权限不足</h1>
-          <p className="text-muted-foreground">
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="space-y-3 text-center">
+          <ShieldAlert className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h1 className="text-xl font-bold">权限不足</h1>
+          <p className="text-sm text-muted-foreground">
             您没有访问管理后台的权限，请联系管理员。
           </p>
         </div>
@@ -47,15 +46,14 @@ export function AdminLayout() {
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)]">
-      {/* Sidebar */}
-      <aside className="w-56 border-r bg-muted/30 shrink-0">
-        <div className="p-4 border-b">
-          <h2 className="font-semibold text-lg">管理后台</h2>
-          <p className="text-xs text-muted-foreground mt-1">
+      <aside className="w-52 shrink-0 border-r bg-muted/20">
+        <div className="border-b p-4">
+          <h2 className="text-sm font-semibold">管理后台</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {user?.role === 'ADMIN' ? '管理员' : '版主'}
           </p>
         </div>
-        <nav className="p-2 space-y-1">
+        <nav className="space-y-0.5 p-2">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
@@ -63,10 +61,10 @@ export function AdminLayout() {
               end={item.end}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
                   isActive
                     ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )
               }
             >
@@ -77,8 +75,7 @@ export function AdminLayout() {
         </nav>
       </aside>
 
-      {/* Main content */}
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 overflow-auto p-6">
         <Outlet />
       </div>
     </div>

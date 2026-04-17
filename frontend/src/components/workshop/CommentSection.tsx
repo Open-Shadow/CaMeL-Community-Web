@@ -111,7 +111,7 @@ export function CommentSection({
             <CardContent className="space-y-4 p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="font-medium text-slate-900">{comment.author.display_name}</div>
+                  <div className="font-medium text-foreground">{comment.author.display_name}</div>
                   <div className="text-xs text-muted-foreground">
                     {comment.author.level} · {formatDate(comment.created_at)}
                   </div>
@@ -141,7 +141,7 @@ export function CommentSection({
                   该评论因低分被折叠，点击展开
                 </button>
               ) : (
-                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{comment.content}</p>
+                <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{comment.content}</p>
               )}
 
               <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -190,10 +190,10 @@ export function CommentSection({
               ) : null}
 
               {comment.replies.length > 0 ? (
-                <div className="space-y-3 rounded-xl bg-slate-50 p-4">
+                <div className="space-y-3 rounded-xl bg-muted p-4">
                   {comment.replies.map((reply) => (
                     <div key={reply.id} className="rounded-lg border bg-white p-3">
-                      <div className="mb-1 text-sm font-medium text-slate-900">
+                      <div className="mb-1 text-sm font-medium text-foreground">
                         {reply.author.display_name}
                       </div>
                       <div className="mb-2 text-xs text-muted-foreground">
@@ -202,7 +202,7 @@ export function CommentSection({
                       {reply.is_collapsed ? (
                         <div className="text-xs text-muted-foreground">该回复因低分被折叠</div>
                       ) : (
-                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{reply.content}</p>
+                        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{reply.content}</p>
                       )}
                     </div>
                   ))}

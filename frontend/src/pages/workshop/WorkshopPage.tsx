@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BookOpen, PenLine, Search } from 'lucide-react'
 
 import { EmptyState } from '@/components/shared/empty-state'
 import { ArticleCardSkeleton } from '@/components/shared/loading-skeleton'
@@ -139,33 +140,34 @@ export default function WorkshopPage() {
   }, [articleType, deferredQuery, difficulty, modelTag, sort])
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <section className="mb-8 rounded-[28px] bg-gradient-to-br from-amber-50 via-white to-sky-50 p-6 shadow-sm ring-1 ring-slate-200">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl space-y-3">
-            <span className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
-              Workshop
-            </span>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">知识工坊</h1>
-            <p className="text-sm leading-6 text-slate-600">
-              沉淀 AI 实战方法、排错记录和可复用工作流。先把问题、方案、效果写清楚，再让 Skill 与文章形成闭环。
-            </p>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-primary" />
+            <h1 className="text-2xl font-bold tracking-tight">知识工坊</h1>
           </div>
-          <Button className="h-11 px-5" onClick={() => navigate('/workshop/create')}>
-            写文章
-          </Button>
+          <p className="mt-1 text-sm text-muted-foreground">沉淀 AI 实战方法、排错记录和可复用工作流</p>
         </div>
-      </section>
+        <Button onClick={() => navigate('/workshop/create')}>
+          <PenLine className="mr-1.5 h-4 w-4" />
+          写文章
+        </Button>
+      </div>
 
-      <section className="mb-8 space-y-4 rounded-3xl border bg-white p-5">
-        <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr]">
-          <Input
-            placeholder="搜索文章、标签或问题场景..."
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-          />
+      <div className="mb-6 space-y-3 rounded-xl border bg-card p-4">
+        <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="搜索文章、标签或问题场景..."
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              className="pl-9"
+            />
+          </div>
           <select
-            className="rounded-md border bg-background px-3 py-2 text-sm"
+            className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
             value={difficulty}
             onChange={(event) => setDifficulty(event.target.value as ArticleSummary['difficulty'] | '')}
           >
@@ -176,7 +178,7 @@ export default function WorkshopPage() {
             ))}
           </select>
           <select
-            className="rounded-md border bg-background px-3 py-2 text-sm"
+            className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
             value={articleType}
             onChange={(event) => setArticleType(event.target.value as ArticleSummary['article_type'] | '')}
           >
@@ -188,9 +190,9 @@ export default function WorkshopPage() {
           </select>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <select
-            className="rounded-md border bg-background px-3 py-2 text-sm"
+            className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
             value={sort}
             onChange={(event) => setSort(event.target.value as (typeof SORT_OPTIONS)[number]['value'])}
           >
@@ -200,38 +202,46 @@ export default function WorkshopPage() {
               </option>
             ))}
           </select>
-          <Button
-            type="button"
-            size="sm"
-            variant={modelTag === '' ? 'default' : 'outline'}
-            onClick={() => setModelTag('')}
-          >
-            全部模型
-          </Button>
-          {MODEL_TAGS.map((tag) => (
-            <Button
-              key={tag}
+          <div className="flex flex-wrap gap-1.5">
+            <button
               type="button"
-              size="sm"
-              variant={modelTag === tag ? 'default' : 'outline'}
-              onClick={() => setModelTag(tag)}
+              onClick={() => setModelTag('')}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                modelTag === ''
+                  ? 'bg-primary text-white'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+              }`}
             >
-              {tag}
-            </Button>
-          ))}
+              全部模型
+            </button>
+            {MODEL_TAGS.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setModelTag(tag)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  modelTag === tag
+                    ? 'bg-primary text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
         </div>
-      </section>
+      </div>
 
       {myDrafts.length > 0 ? (
-        <section className="mb-8 space-y-4 rounded-3xl border border-amber-200 bg-amber-50/50 p-5">
+        <section className="mb-8 space-y-3 rounded-xl border border-amber-200/50 bg-amber-50/30 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">我的草稿</h2>
-              <Badge variant="secondary">{myDrafts.length}</Badge>
+              <h2 className="text-base font-semibold">我的草稿</h2>
+              <Badge variant="secondary" className="text-xs">{myDrafts.length}</Badge>
             </div>
-            <span className="text-sm text-muted-foreground">点击草稿可继续编辑或发布</span>
+            <span className="text-xs text-muted-foreground">点击继续编辑或发布</span>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {myDrafts.map((article) => (
               <ArticleCard
                 key={article.id}
@@ -244,12 +254,12 @@ export default function WorkshopPage() {
       ) : null}
 
       {featuredArticles.length > 0 && !deferredQuery ? (
-        <section className="mb-8 space-y-4">
+        <section className="mb-8 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-900">本周精选</h2>
-            <span className="text-sm text-muted-foreground">优先展示高质量沉淀内容</span>
+            <h2 className="text-lg font-semibold">本周精选</h2>
+            <span className="text-xs text-muted-foreground">高质量沉淀内容</span>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {featuredArticles.map((article) => (
               <ArticleCard
                 key={article.id}
@@ -262,17 +272,17 @@ export default function WorkshopPage() {
         </section>
       ) : null}
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-900">
+          <h2 className="text-lg font-semibold">
             {deferredQuery ? '搜索结果' : '最新文章'}
           </h2>
-          <span className="text-sm text-muted-foreground">{articles.length} 篇</span>
+          <span className="text-xs text-muted-foreground">{articles.length} 篇</span>
         </div>
 
         {error ? (
           <EmptyState
-            title="文章列表加载失败"
+            title="加载失败"
             description={error}
             action={
               <Button variant="outline" onClick={() => window.location.reload()}>
@@ -281,7 +291,7 @@ export default function WorkshopPage() {
             }
           />
         ) : loading ? (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {Array.from({ length: 6 }).map((_, index) => (
               <ArticleCardSkeleton key={index} />
             ))}
@@ -289,11 +299,11 @@ export default function WorkshopPage() {
         ) : articles.length === 0 ? (
           <EmptyState
             title="暂无匹配文章"
-            description="可以先调整筛选条件，或者发布第一篇解决方案文章。"
+            description="调整筛选条件，或发布第一篇解决方案文章。"
             action={<Button onClick={() => navigate('/workshop/create')}>写第一篇文章</Button>}
           />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {articles.map((article) => (
               <ArticleCard
                 key={article.id}

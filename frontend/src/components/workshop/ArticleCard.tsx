@@ -1,7 +1,6 @@
-import { ArrowUpRight, MessageSquare, Star } from 'lucide-react'
+import { MessageSquare, Star, ThumbsUp } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { ArticleSummary } from '@/lib/workshop'
 import { formatDate } from '@/lib/utils'
@@ -35,64 +34,60 @@ const TYPE_LABELS: Record<ArticleSummary['article_type'], string> = {
 export default function ArticleCard({ article, onClick, featured = false }: ArticleCardProps) {
   return (
     <Card
-      className="cursor-pointer border-border/70 transition-all hover:-translate-y-0.5 hover:shadow-lg"
+      className="group cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md"
       onClick={onClick}
     >
-      <CardContent className="space-y-4 p-5">
-        <div className="flex flex-wrap items-center gap-2">
+      <CardContent className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge className={DIFFICULTY_STYLES[article.difficulty]} variant="outline">
             {DIFFICULTY_LABELS[article.difficulty]}
           </Badge>
-          <Badge variant="secondary">{TYPE_LABELS[article.article_type]}</Badge>
-          {article.is_featured || featured ? (
-            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+          <Badge variant="secondary" className="text-xs">{TYPE_LABELS[article.article_type]}</Badge>
+          {(article.is_featured || featured) && (
+            <Badge className="border-primary/20 bg-primary/10 text-primary hover:bg-primary/10">
               <Star className="mr-1 h-3 w-3" />
               精选
             </Badge>
-          ) : null}
+          )}
         </div>
 
-        <div className="space-y-2">
-          <h3 className="line-clamp-2 text-xl font-semibold leading-7">{article.title}</h3>
-          <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{article.excerpt}</p>
+        <div className="space-y-1.5">
+          <h3 className="line-clamp-2 text-base font-semibold leading-snug group-hover:text-primary">{article.title}</h3>
+          <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{article.excerpt}</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {article.model_tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant="outline" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
-          {article.custom_tags.slice(0, 2).map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-xs">
-              #{tag}
-            </Badge>
-          ))}
-        </div>
+        {(article.model_tags.length > 0 || article.custom_tags.length > 0) && (
+          <div className="flex flex-wrap gap-1.5">
+            {article.model_tags.slice(0, 2).map((tag) => (
+              <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{tag}</span>
+            ))}
+            {article.custom_tags.slice(0, 2).map((tag) => (
+              <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">#{tag}</span>
+            ))}
+          </div>
+        )}
 
-        {article.related_skill ? (
-          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+        {article.related_skill && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground">
             关联 Skill: {article.related_skill.name}
           </div>
-        ) : null}
+        )}
 
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{article.author.display_name}</span>
-          <span>{formatDate(article.published_at || article.created_at)}</span>
-        </div>
-
-        <div className="flex items-center justify-between border-t pt-3 text-sm text-muted-foreground">
-          <div className="flex items-center gap-4">
-            <span>净票 {article.net_votes.toFixed(1)}</span>
+        <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3">
+            <span>{article.author.display_name}</span>
+            <span>{formatDate(article.published_at || article.created_at)}</span>
+          </div>
+          <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1">
-              <MessageSquare className="h-4 w-4" />
+              <ThumbsUp className="h-3 w-3" />
+              {article.net_votes.toFixed(0)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <MessageSquare className="h-3 w-3" />
               {article.comment_count}
             </span>
           </div>
-          <Button variant="ghost" className="gap-1 px-0 text-slate-700">
-            查看详情
-            <ArrowUpRight className="h-4 w-4" />
-          </Button>
         </div>
       </CardContent>
     </Card>

@@ -118,7 +118,7 @@ export default function NotificationsPage() {
         <p className="text-muted-foreground">查看站内消息、信用分变化提醒，以及当前 SSE 接入状态。</p>
       </div>
 
-      <Card className="border-dashed bg-sky-50/60">
+      <Card className="border-dashed bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <RadioTower className="h-5 w-5 text-sky-600" />
@@ -168,7 +168,7 @@ export default function NotificationsPage() {
                   key={item.id}
                   className={cn(
                     'rounded-2xl border px-4 py-4 shadow-sm transition',
-                    item.is_read ? 'bg-background' : 'border-sky-200 bg-sky-50/50'
+                    item.is_read ? 'bg-background' : 'border-primary/20 bg-primary/5'
                   )}
                 >
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">

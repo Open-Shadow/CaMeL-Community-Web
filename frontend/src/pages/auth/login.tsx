@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
@@ -56,33 +56,39 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">登录</CardTitle>
-          <CardDescription>欢迎回到 CaMeL Community</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">{error}</div>}
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">邮箱</label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="your@email.com" />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label htmlFor="password" className="text-sm font-medium">密码</label>
-                <Link to="/forgot-password" className="text-xs text-primary hover:underline">忘记密码？</Link>
+    <div className="flex min-h-[80vh] items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-black text-white">
+            C
+          </div>
+          <h1 className="text-2xl font-bold">登录 CaMeL</h1>
+          <p className="mt-1 text-sm text-muted-foreground">欢迎回来</p>
+        </div>
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
+              <div className="space-y-2">
+                <label htmlFor="email" className="text-sm font-medium">邮箱</label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="your@email.com" />
               </div>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? '登录中...' : '登录'}
-            </Button>
-          </form>
-          <div className="mt-4 space-y-3">
-            <div className="text-center text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              或使用社交账号登录
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-sm font-medium">密码</label>
+                  <Link to="/forgot-password" className="text-xs text-primary hover:underline">忘记密码？</Link>
+                </div>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+              </div>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? '登录中...' : '登录'}
+              </Button>
+            </form>
+            <div className="relative py-2">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+              <div className="relative flex justify-center">
+                <span className="bg-card px-3 text-xs text-muted-foreground">或使用社交账号</span>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Button
@@ -102,13 +108,13 @@ export function LoginPage() {
                 {socialLoading === 'google' ? '跳转中...' : 'Google'}
               </Button>
             </div>
-          </div>
-          <div className="mt-4 text-center text-sm">
-            还没有账号？{' '}
-            <Link to="/register" className="text-primary hover:underline">立即注册</Link>
-          </div>
-        </CardContent>
-      </Card>
+            <p className="text-center text-sm text-muted-foreground">
+              还没有账号？{' '}
+              <Link to="/register" className="font-medium text-primary hover:underline">立即注册</Link>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

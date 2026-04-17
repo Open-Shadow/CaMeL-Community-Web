@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Plus, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import SkillCard from '@/components/skill/SkillCard'
@@ -107,49 +108,66 @@ export default function MarketplacePage() {
   }, [category, deferredQuery, sort])
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">技能市场</h1>
-        <Button onClick={() => navigate('/marketplace/create')}>+ 上架技能</Button>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">技能市场</h1>
+          <p className="mt-1 text-sm text-muted-foreground">发现、购买和使用社区创建的 AI Skill</p>
+        </div>
+        <Button onClick={() => navigate('/marketplace/create')}>
+          <Plus className="mr-1.5 h-4 w-4" />
+          上架技能
+        </Button>
       </div>
 
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <Input
-          placeholder="搜索技能..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="w-56"
-        />
-        <select
-          className="rounded-md border bg-background px-3 py-2 text-sm"
-          value={sort}
-          onChange={(e) => setSort(e.target.value as (typeof SORT_OPTIONS)[number]['value'])}
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              按{option.label}排序
-            </option>
-          ))}
-        </select>
-        {CATEGORIES.map(c => (
-          <Button
-            key={c.value}
-            variant={category === c.value ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCategory(c.value)}
+      <div className="mb-6 space-y-3 rounded-xl border bg-card p-4">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="搜索技能名称、描述..."
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <select
+            className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as (typeof SORT_OPTIONS)[number]['value'])}
           >
-            {c.label}
-          </Button>
-        ))}
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                按{option.label}排序
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {CATEGORIES.map(c => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setCategory(c.value)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                category === c.value
+                  ? 'bg-primary text-white'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {trendingSkills.length > 0 && !deferredQuery ? (
-        <section className="mb-6 space-y-3">
+        <section className="mb-8 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">热门榜</h2>
-            <span className="text-sm text-muted-foreground">按调用量、评分和精选优先级综合排序</span>
+            <h2 className="text-lg font-semibold">热门榜</h2>
+            <span className="text-xs text-muted-foreground">综合排序</span>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {trendingSkills.map((skill) => (
               <SkillCard key={`trending-${skill.id}`} skill={skill} onClick={() => navigate(`/marketplace/${skill.id}`)} />
             ))}
@@ -159,7 +177,7 @@ export default function MarketplacePage() {
 
       {error ? (
         <EmptyState
-          title="技能列表加载失败"
+          title="加载失败"
           description={error}
           action={
             <Button variant="outline" onClick={() => window.location.reload()}>
@@ -168,15 +186,15 @@ export default function MarketplacePage() {
           }
         />
       ) : loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <SkillCardSkeleton key={index} />
           ))}
         </div>
       ) : skills.length === 0 ? (
         <EmptyState
-          title="还没有符合条件的 Skill"
-          description="先调整筛选条件，或者成为第一个发布者。"
+          title="暂无符合条件的 Skill"
+          description="调整筛选条件，或成为第一个发布者。"
           action={
             <Button onClick={() => navigate('/marketplace/create')}>
               创建 Skill
@@ -184,7 +202,7 @@ export default function MarketplacePage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {skills.map((skill) => (
             <SkillCard
               key={skill.id}

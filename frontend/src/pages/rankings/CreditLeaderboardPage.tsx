@@ -31,7 +31,7 @@ const LEVEL_LABELS: Record<string, string> = {
 function RankIcon({ rank }: { rank: number }) {
   if (rank === 1) return <Trophy className="h-5 w-5 text-yellow-500" />;
   if (rank === 2) return <Medal className="h-5 w-5 text-gray-400" />;
-  if (rank === 3) return <Award className="h-5 w-5 text-amber-600" />;
+  if (rank === 3) return <Award className="h-5 w-5 text-primary" />;
   return <span className="w-5 text-center text-sm font-mono text-muted-foreground">{rank}</span>;
 }
 

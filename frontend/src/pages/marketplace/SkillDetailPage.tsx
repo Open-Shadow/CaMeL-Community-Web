@@ -174,7 +174,7 @@ export default function SkillDetailPage() {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_360px]">
         <div className="space-y-6">
-          <section className="rounded-[28px] border bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border bg-white p-6 shadow-sm">
             <div className="mb-2 flex flex-wrap gap-2">
               {skill.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}
               <Badge variant={STATUS_BADGE[skill.status] || 'outline'}>
@@ -191,7 +191,7 @@ export default function SkillDetailPage() {
               <span>v{skill.current_version}</span>
               <span>{formatSize(skill.package_size)}</span>
               <span>更新于 {formatDate(skill.updated_at)}</span>
-              <span className="text-base font-semibold text-amber-500">
+              <span className="text-base font-semibold text-primary">
                 {skill.pricing_model === 'FREE'
                   ? '免费'
                   : `${formatCurrency(skill.price)}`}

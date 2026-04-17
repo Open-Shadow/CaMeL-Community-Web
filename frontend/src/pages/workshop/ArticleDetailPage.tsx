@@ -180,12 +180,12 @@ export default function ArticleDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.7fr]">
         <div className="space-y-6">
-          <section className="rounded-[28px] border bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border bg-white p-6 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <Badge variant="secondary">{DIFFICULTY_LABELS[article.difficulty]}</Badge>
               <Badge variant="outline">{TYPE_LABELS[article.article_type]}</Badge>
               {article.is_featured ? (
-                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                <Badge className="border-primary/20 bg-primary/10 text-primary hover:bg-primary/10">
                   <Sparkles className="mr-1 h-3 w-3" />
                   精选
                 </Badge>
@@ -195,7 +195,7 @@ export default function ArticleDetailPage() {
               ) : null}
             </div>
 
-            <h1 className="mb-4 text-4xl font-bold tracking-tight text-slate-900">{article.title}</h1>
+            <h1 className="mb-4 text-4xl font-bold tracking-tight">{article.title}</h1>
 
             <div className="mb-4 flex flex-wrap gap-2">
               {article.model_tags.map((tag) => (
@@ -221,7 +221,7 @@ export default function ArticleDetailPage() {
             </div>
 
             {article.is_outdated ? (
-              <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <div className="mt-5 rounded-xl border border-amber-200/50 bg-amber-50/50 p-4 text-sm text-amber-900">
                 此文章涉及的模型版本可能已更新，请结合当前官方文档复核。
               </div>
             ) : null}
@@ -229,7 +229,7 @@ export default function ArticleDetailPage() {
             {error ? <div className="mt-5 text-sm text-rose-600">{error}</div> : null}
           </section>
 
-          <section className="rounded-[28px] border bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border bg-white p-6 shadow-sm">
             <ArticleRenderer content={article.content} />
           </section>
 
@@ -333,12 +333,12 @@ export default function ArticleDetailPage() {
           {article.related_skill ? (
             <Card>
               <CardContent className="space-y-3 p-5">
-                <div className="text-sm font-medium text-slate-500">关联 Skill</div>
-                <div className="text-lg font-semibold text-slate-900">{article.related_skill.name}</div>
+                <div className="text-sm font-medium text-muted-foreground">关联 Skill</div>
+                <div className="text-lg font-semibold">{article.related_skill.name}</div>
                 <div className="text-sm text-muted-foreground">
                   {article.related_skill.creator_name} · {article.related_skill.avg_rating.toFixed(1)} 分
                 </div>
-                <div className="text-sm text-slate-600">
+                <div className="text-sm text-primary font-medium">
                   {article.related_skill.pricing_model === 'FREE'
                     ? '免费'
                     : `${formatCurrency(article.related_skill.price)}`}
@@ -357,7 +357,7 @@ export default function ArticleDetailPage() {
 
           <Card>
             <CardContent className="space-y-3 p-5">
-              <div className="text-sm font-medium text-slate-500">互动概览</div>
+              <div className="text-sm font-medium text-muted-foreground">互动概览</div>
               <div className="flex items-center justify-between text-sm">
                 <span>净票</span>
                 <span>{article.net_votes.toFixed(1)}</span>

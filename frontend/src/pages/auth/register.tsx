@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api, useAuth } from '@/hooks/use-auth';
@@ -111,14 +111,19 @@ export function RegisterPage() {
 
   if (registered) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center space-y-4">
+      <div className="flex min-h-[80vh] items-center justify-center px-4">
+        <Card className="w-full max-w-sm">
+          <CardContent className="space-y-4 pt-6 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
             <h2 className="text-xl font-bold">注册成功</h2>
             <p className="text-sm text-muted-foreground">
               验证邮件已发送至 <strong>{email}</strong>，请查收并点击链接完成验证。
             </p>
-            <Link to="/login" className="text-primary hover:underline text-sm">前往登录</Link>
+            <Link to="/login" className="inline-block text-sm font-medium text-primary hover:underline">前往登录</Link>
           </CardContent>
         </Card>
       </div>
@@ -126,72 +131,75 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">注册账号</CardTitle>
-          <CardDescription>加入 CaMeL Community</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">{error}</div>}
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">邮箱</label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="your@email.com" />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="displayName" className="text-sm font-medium">显示名称（可选）</label>
-              <Input id="displayName" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="您的昵称" />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="inviteCode" className="text-sm font-medium">
-                邀请码（可选）
-              </label>
-              <Input
-                id="inviteCode"
-                type="text"
-                value={inviteCode}
-                onChange={(e) => {
-                  setInviteCode(e.target.value.toUpperCase());
-                  setInviteValid(null);
-                  setInviteMessage('');
-                }}
-                onBlur={() => void validateInviteCode(inviteCode)}
-                placeholder="输入好友分享的邀请码"
-              />
-              {inviteMessage && (
-                <p className={`text-xs ${inviteValid ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {isCheckingInvite ? '验证邀请码中...' : inviteMessage}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                密码
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="至少8个字符"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="text-sm font-medium">确认密码</label>
-              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="再次输入密码" />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? '注册中...' : '注册'}
-            </Button>
-          </form>
-          <div className="mt-4 text-center text-sm">
-            已有账号？{' '}
-            <Link to="/login" className="text-primary hover:underline">立即登录</Link>
+    <div className="flex min-h-[80vh] items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-black text-white">
+            C
           </div>
-        </CardContent>
-      </Card>
+          <h1 className="text-2xl font-bold">加入 CaMeL</h1>
+          <p className="mt-1 text-sm text-muted-foreground">创建你的社区账号</p>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
+              <div className="space-y-2">
+                <label htmlFor="email" className="text-sm font-medium">邮箱</label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="your@email.com" />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="displayName" className="text-sm font-medium">显示名称（可选）</label>
+                <Input id="displayName" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="您的昵称" />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="inviteCode" className="text-sm font-medium">
+                  邀请码（可选）
+                </label>
+                <Input
+                  id="inviteCode"
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => {
+                    setInviteCode(e.target.value.toUpperCase());
+                    setInviteValid(null);
+                    setInviteMessage('');
+                  }}
+                  onBlur={() => void validateInviteCode(inviteCode)}
+                  placeholder="输入好友分享的邀请码"
+                />
+                {inviteMessage && (
+                  <p className={`text-xs ${inviteValid ? 'text-primary' : 'text-destructive'}`}>
+                    {isCheckingInvite ? '验证邀请码中...' : inviteMessage}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="password" className="text-sm font-medium">密码</label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="至少8个字符"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="confirmPassword" className="text-sm font-medium">确认密码</label>
+                <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required placeholder="再次输入密码" />
+              </div>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? '注册中...' : '注册'}
+              </Button>
+            </form>
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              已有账号？{' '}
+              <Link to="/login" className="font-medium text-primary hover:underline">立即登录</Link>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

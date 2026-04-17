@@ -1,5 +1,4 @@
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { SkillSummary } from '@/lib/skills'
 import { formatCurrency } from '@/lib/utils'
@@ -24,46 +23,44 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function SkillCard({ skill, onClick }: SkillCardProps) {
   return (
     <Card
-      className="cursor-pointer border-border/70 transition-shadow hover:shadow-md"
+      className="group cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md"
       onClick={onClick}
     >
-      <CardContent className="space-y-4 p-5">
+      <CardContent className="space-y-3 p-5">
         <div className="flex items-center justify-between gap-3">
-          <Badge variant="secondary">
+          <Badge variant="secondary" className="text-xs">
             {CATEGORY_LABELS[skill.category] || skill.category}
           </Badge>
-          <span className="text-sm font-semibold text-amber-600">
+          <span className="text-sm font-semibold text-primary">
             {skill.pricing_model === 'FREE'
               ? '免费'
               : `${formatCurrency(skill.price)}`}
           </span>
         </div>
 
-        <div className="space-y-2">
-          <h3 className="line-clamp-1 text-lg font-semibold">{skill.name}</h3>
-          <p className="line-clamp-3 text-sm text-muted-foreground">
+        <div className="space-y-1.5">
+          <h3 className="line-clamp-1 text-base font-semibold group-hover:text-primary">{skill.name}</h3>
+          <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
             {skill.description}
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {skill.tags.slice(0, 4).map((tag) => (
-            <Badge key={tag} variant="outline" className="text-xs">
-              #{tag}
-            </Badge>
-          ))}
-        </div>
+        {skill.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {skill.tags.slice(0, 3).map((tag) => (
+              <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
 
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>by {skill.creator_name}</span>
+        <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
+          <span>{skill.creator_name}</span>
           <span>
-            ⭐ {skill.avg_rating.toFixed(1)} · {skill.total_calls} 次调用
+            {skill.avg_rating.toFixed(1)} · {skill.total_calls} 次调用
           </span>
         </div>
-
-        <Button className="w-full" variant="outline">
-          查看详情
-        </Button>
       </CardContent>
     </Card>
   )

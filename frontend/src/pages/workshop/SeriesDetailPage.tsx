@@ -60,13 +60,13 @@ export default function SeriesDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <section className="rounded-[28px] border bg-gradient-to-br from-orange-50 via-white to-sky-50 p-8 shadow-sm">
+      <section className="rounded-2xl border bg-gradient-to-br from-primary/5 via-white to-red-50 p-8 shadow-sm">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant={series.is_completed ? 'default' : 'outline'}>
               {series.is_completed ? '系列已完成' : '系列进行中'}
             </Badge>
-            {series.completion_rewarded ? <Badge className="bg-emerald-100 text-emerald-700">奖励已发放</Badge> : null}
+            {series.completion_rewarded ? <Badge className="bg-primary/10 text-emerald-700">奖励已发放</Badge> : null}
           </div>
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">{series.title}</h1>

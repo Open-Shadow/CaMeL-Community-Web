@@ -1,5 +1,6 @@
-import { LogOut, Settings, User as UserIcon, Bell, Shield } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom'
+import { LogOut, Settings, User as UserIcon, Bell, Shield, Menu, X } from 'lucide-react';
+import { useState } from 'react';
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 
 import { NotificationBell } from '@/components/user/notification-bell';
 import { BalanceDisplay } from '@/components/shared/balance-display';
@@ -13,11 +14,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth'
-import { getInitials } from '@/lib/utils';
+import { cn, getInitials } from '@/lib/utils';
+
+const NAV_LINKS = [
+  { to: '/marketplace', label: '技能市场' },
+  { to: '/bounty', label: '悬赏任务' },
+  { to: '/workshop', label: '知识工坊' },
+  { to: '/rankings/credit', label: '排行榜' },
+];
 
 export function Header() {
   const navigate = useNavigate()
   const { isAuthenticated, isLoading, logout, user } = useAuth()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -25,97 +34,160 @@ export function Header() {
   }
 
   return (
-    <header className="border-b bg-background/95 backdrop-blur">
-      <div className="container mx-auto flex h-16 items-center justify-between gap-6 px-4">
-        <div className="flex items-center gap-8">
-          <Link to="/" className="text-xl font-bold tracking-tight">CaMeL Community</Link>
-          <nav className="hidden gap-6 text-sm text-muted-foreground md:flex">
-            <Link to="/marketplace" className="transition hover:text-foreground">技能市场</Link>
-            {isAuthenticated ? <Link to="/marketplace/mine" className="transition hover:text-foreground">我的 Skill</Link> : null}
-            <Link to="/bounty" className="transition hover:text-foreground">悬赏任务</Link>
-            <Link to="/workshop" className="transition hover:text-foreground">知识工坊</Link>
-            <Link to="/rankings/credit" className="transition hover:text-foreground">排行榜</Link>
+    <header className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-lg">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="flex items-center gap-6">
+          <Link to="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-xs font-black text-white">C</span>
+            <span className="hidden sm:inline">CaMeL</span>
+          </Link>
+          <nav className="hidden items-center gap-1 md:flex">
+            {NAV_LINKS.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={({ isActive }) =>
+                  cn(
+                    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )
+                }
+              >
+                {link.label}
+              </NavLink>
+            ))}
+            {isAuthenticated ? (
+              <NavLink
+                to="/marketplace/mine"
+                className={({ isActive }) =>
+                  cn(
+                    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )
+                }
+              >
+                我的 Skill
+              </NavLink>
+            ) : null}
           </nav>
         </div>
-        {isLoading ? (
-          <div className="text-sm text-muted-foreground">加载中...</div>
-        ) : isAuthenticated && user ? (
-          <div className="flex items-center gap-3">
-            <BalanceDisplay />
-            <NotificationBell />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-3 rounded-full border border-border bg-background px-2 py-1.5 transition hover:bg-accent"
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatar_url} alt={user.display_name} />
-                    <AvatarFallback>{getInitials(user.display_name || user.username)}</AvatarFallback>
-                  </Avatar>
-                  <div className="hidden text-left md:block">
-                    <div className="text-sm font-medium leading-none">
-                      {user.display_name || user.username}
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">@{user.username}</div>
+
+        <div className="flex items-center gap-2">
+          {isLoading ? (
+            <div className="h-8 w-20 animate-pulse rounded-md bg-muted" />
+          ) : isAuthenticated && user ? (
+            <>
+              <BalanceDisplay />
+              <NotificationBell />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-full p-1 transition hover:bg-muted"
+                  >
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={user.avatar_url} alt={user.display_name} />
+                      <AvatarFallback className="text-xs">{getInitials(user.display_name || user.username)}</AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <div className="px-3 py-2">
+                    <p className="text-sm font-medium">{user.display_name || user.username}</p>
+                    <p className="text-xs text-muted-foreground">@{user.username}</p>
                   </div>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem asChild>
-                  <Link to={`/u/${encodeURIComponent(user.username)}`} className="flex items-center gap-2">
-                    <UserIcon className="h-4 w-4" />
-                    公开主页
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/notifications" className="flex items-center gap-2">
-                    <Bell className="h-4 w-4" />
-                    通知中心
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/profile/settings" className="flex items-center gap-2">
-                    <Settings className="h-4 w-4" />
-                    个人设置
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/profile/invites" className="flex items-center gap-2">
-                    <UserIcon className="h-4 w-4" />
-                    邀请中心
-                  </Link>
-                </DropdownMenuItem>
-                {(user?.role === 'ADMIN' || user?.role === 'MODERATOR') && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link to="/admin" className="flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
-                        管理后台
-                      </Link>
-                    </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => void handleLogout()} className="flex items-center gap-2">
-                  <LogOut className="h-4 w-4" />
-                  退出登录
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost">
-              <Link to="/login">登录</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/register">注册</Link>
-            </Button>
-          </div>
-        )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to={`/u/${encodeURIComponent(user.username)}`} className="flex items-center gap-2">
+                      <UserIcon className="h-4 w-4" />
+                      公开主页
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/notifications" className="flex items-center gap-2">
+                      <Bell className="h-4 w-4" />
+                      通知中心
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/profile/settings" className="flex items-center gap-2">
+                      <Settings className="h-4 w-4" />
+                      个人设置
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/profile/invites" className="flex items-center gap-2">
+                      <UserIcon className="h-4 w-4" />
+                      邀请中心
+                    </Link>
+                  </DropdownMenuItem>
+                  {(user?.role === 'ADMIN' || user?.role === 'MODERATOR') && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin" className="flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          管理后台
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => void handleLogout()} className="flex items-center gap-2 text-destructive">
+                    <LogOut className="h-4 w-4" />
+                    退出登录
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : (
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/login">登录</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to="/register">注册</Link>
+              </Button>
+            </>
+          )}
+
+          <button
+            type="button"
+            className="ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-muted md:hidden"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
+
+      {mobileMenuOpen && (
+        <nav className="border-t bg-white px-4 py-3 md:hidden">
+          <div className="flex flex-col gap-1">
+            {NAV_LINKS.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  cn(
+                    'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )
+                }
+              >
+                {link.label}
+              </NavLink>
+            ))}
+          </div>
+        </nav>
+      )}
     </header>
   )
 }

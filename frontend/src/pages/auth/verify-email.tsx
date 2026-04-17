@@ -43,7 +43,7 @@ export function VerifyEmailPage() {
                 ? 'bg-green-50 text-green-600'
                 : status === 'error'
                   ? 'bg-red-50 text-red-500'
-                  : 'bg-slate-50 text-slate-600'
+                  : 'bg-muted text-muted-foreground'
             }`}
           >
             {message}

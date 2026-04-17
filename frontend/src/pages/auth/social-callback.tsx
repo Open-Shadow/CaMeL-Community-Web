@@ -41,7 +41,7 @@ export function SocialCallbackPage() {
           <CardDescription>正在同步你的账号状态</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">{message}</div>
+          <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">{message}</div>
           <div className="text-center text-sm">
             <Link to="/login" className="text-primary hover:underline">
               返回登录

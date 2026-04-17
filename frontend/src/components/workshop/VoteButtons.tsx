@@ -31,7 +31,7 @@ export function VoteButtons({ netVotes, myVote, disabled = false, onVote, onRemo
         <ThumbsDown className="mr-2 h-4 w-4" />
         无用
       </Button>
-      <div className="min-w-24 text-sm font-medium text-slate-700">净票 {netVotes.toFixed(1)}</div>
+      <div className="min-w-24 text-sm font-medium text-foreground">净票 {netVotes.toFixed(1)}</div>
       {myVote ? (
         <Button type="button" variant="ghost" disabled={disabled} onClick={onRemove}>
           <Trash2 className="mr-2 h-4 w-4" />

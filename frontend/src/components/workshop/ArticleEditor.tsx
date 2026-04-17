@@ -57,7 +57,7 @@ export function ArticleEditor({ value, onChange }: ArticleEditorProps) {
   }
 
   return (
-    <div className="rounded-xl bg-slate-50/70">
+    <div className="rounded-xl bg-muted/70">
       <div className="flex flex-wrap gap-2 rounded-t-xl border border-border bg-white p-3">
         <Button type="button" variant="outline" size="sm" onClick={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="mr-1 h-4 w-4" />

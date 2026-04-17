@@ -212,7 +212,7 @@ export default function EditArticlePage() {
       </div>
 
       <div className="mb-8 max-w-3xl space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">编辑文章</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">编辑文章</h1>
       </div>
 
       <form className="grid gap-6 lg:grid-cols-[1.6fr_0.8fr]">
@@ -319,7 +319,7 @@ export default function EditArticlePage() {
                   ))}
                 </select>
               </div>
-              <div className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+              <div className="rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
                 发布要求：
                 <div>标题 5-120 字。</div>
                 <div>至少选择 1 个模型标签，自定义标签最多 5 个。</div>

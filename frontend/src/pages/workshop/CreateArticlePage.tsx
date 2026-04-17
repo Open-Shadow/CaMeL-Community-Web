@@ -107,8 +107,8 @@ export default function CreateArticlePage() {
       </div>
 
       <div className="mb-8 max-w-3xl space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">写一篇可复用的解决方案文章</h1>
-        <p className="text-sm leading-6 text-slate-600">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">写一篇可复用的解决方案文章</h1>
+        <p className="text-sm leading-6 text-muted-foreground">
           Phase 1 的文章围绕 Problem / Solution / Result 三段展开，但不做强制校验。发布前需填写标题和至少 1 个模型标签。
         </p>
       </div>
@@ -217,7 +217,7 @@ export default function CreateArticlePage() {
                   ))}
                 </select>
               </div>
-              <div className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+              <div className="rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
                 发布要求：
                 <div>标题 5-120 字。</div>
                 <div>至少选择 1 个模型标签，自定义标签最多 5 个。</div>

@@ -87,16 +87,16 @@ export function ProfileInvitesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/60">
+    <div className="min-h-screen bg-muted/60">
       <div className="container mx-auto max-w-6xl px-4 py-10">
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">
+            <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
               <Sparkles className="h-3.5 w-3.5" />
               邀请裂变基础版
             </p>
-            <h1 className="text-3xl font-semibold text-slate-900">邀请好友</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-600">
+            <h1 className="text-3xl font-semibold text-foreground">邀请好友</h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               当前邀请码为单次使用。注册即时奖励已接入，首充和首月消费奖励保留了可扩展基础字段。
             </p>
           </div>
@@ -106,7 +106,7 @@ export function ProfileInvitesPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-          <Card className="border-slate-200 bg-white shadow-sm">
+          <Card className="border-border bg-white shadow-sm">
             <CardHeader>
               <CardTitle>当前邀请码</CardTitle>
               <CardDescription>分享后首位成功注册者会消耗这张邀请码</CardDescription>
@@ -136,7 +136,7 @@ export function ProfileInvitesPage() {
                 </div>
               </div>
 
-              {copyMessage && <p className="text-sm text-emerald-600">{copyMessage}</p>}
+              {copyMessage && <p className="text-sm text-primary">{copyMessage}</p>}
             </CardContent>
           </Card>
 
@@ -148,7 +148,7 @@ export function ProfileInvitesPage() {
           </div>
         </div>
 
-        <Card className="mt-6 border-slate-200 bg-white shadow-sm">
+        <Card className="mt-6 border-border bg-white shadow-sm">
           <CardHeader>
             <CardTitle>最近邀请</CardTitle>
             <CardDescription>
@@ -157,7 +157,7 @@ export function ProfileInvitesPage() {
           </CardHeader>
           <CardContent>
             {dashboard.recent_invites.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-border bg-muted px-6 py-10 text-center text-sm text-muted-foreground">
                 还没有邀请记录。复制上面的链接发给朋友后，这里会显示最新绑定结果。
               </div>
             ) : (
@@ -165,26 +165,26 @@ export function ProfileInvitesPage() {
                 {dashboard.recent_invites.map((invite) => (
                   <div
                     key={invite.id}
-                    className="flex flex-col gap-3 rounded-xl border border-slate-200 px-4 py-4 md:flex-row md:items-center md:justify-between"
+                    className="flex flex-col gap-3 rounded-xl border border-border px-4 py-4 md:flex-row md:items-center md:justify-between"
                   >
                     <div>
-                      <div className="font-medium text-slate-900">
+                      <div className="font-medium text-foreground">
                         {invite.invitee_display_name || invite.invitee_email}
                       </div>
-                      <div className="mt-1 text-sm text-slate-500">
+                      <div className="mt-1 text-sm text-muted-foreground">
                         {invite.code}
                       </div>
                     </div>
                     <div className="flex flex-col items-start gap-2 md:items-end">
-                      <div className="text-sm text-slate-500">
+                      <div className="text-sm text-muted-foreground">
                         {new Date(invite.used_at).toLocaleString()}
                       </div>
                       {invite.risk_flags.length > 0 ? (
-                        <div className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-900">
+                        <div className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
                           风控标记：{invite.risk_flags.join(', ')}
                         </div>
                       ) : (
-                        <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700">
+                        <div className="rounded-full bg-primary/10 px-3 py-1 text-xs text-emerald-700">
                           即时奖励已生效
                         </div>
                       )}
@@ -212,12 +212,12 @@ function StatCard({
   help: string;
 }) {
   return (
-    <Card className="border-slate-200 bg-white shadow-sm">
+    <Card className="border-border bg-white shadow-sm">
       <CardContent className="flex items-start justify-between p-5">
         <div>
-          <div className="text-sm text-slate-500">{label}</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
-          <div className="mt-1 text-xs text-slate-500">{help}</div>
+          <div className="text-sm text-muted-foreground">{label}</div>
+          <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{help}</div>
         </div>
         <div className="rounded-full bg-slate-100 p-2 text-slate-700">{icon}</div>
       </CardContent>
