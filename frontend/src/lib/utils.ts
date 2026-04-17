@@ -63,3 +63,14 @@ export function getInitials(value?: string | null) {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return parts.slice(0, 2).map((part) => part[0]).join('').toUpperCase()
 }
+
+export function extractApiError(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail
+  if (!detail) return fallback
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item: any) => item?.msg || item?.message || JSON.stringify(item)).filter(Boolean)
+    return messages.length > 0 ? messages.join('；') : fallback
+  }
+  return fallback
+}

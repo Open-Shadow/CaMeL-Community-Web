@@ -28,7 +28,7 @@ import {
   type ArticleDetail,
   type RecommendedArticle,
 } from '@/lib/workshop'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { extractApiError, formatCurrency, formatDate } from '@/lib/utils'
 import { htmlToMarkdown, downloadMarkdown } from '@/lib/markdown'
 
 const DIFFICULTY_LABELS: Record<ArticleDetail['difficulty'], string> = {
@@ -79,7 +79,7 @@ export default function ArticleDetailPage() {
         setRelatedArticles(relatedData)
       } catch (err: any) {
         if (!active) return
-        setError(err.response?.data?.detail || '文章详情加载失败')
+        setError(extractApiError(err, '文章详情加载失败'))
       } finally {
         if (active) setLoading(false)
       }
@@ -161,7 +161,7 @@ export default function ArticleDetailPage() {
                     const published = await publishArticle(article.id)
                     setArticle(published)
                   } catch (err: any) {
-                    setError(err.response?.data?.detail || '发布失败')
+                    setError(extractApiError(err, '发布失败'))
                   } finally {
                     setPublishing(false)
                   }
@@ -177,6 +177,12 @@ export default function ArticleDetailPage() {
           ) : null}
         </div>
       </div>
+
+      {error ? (
+        <div className="mb-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.7fr]">
         <div className="space-y-6">
@@ -226,7 +232,6 @@ export default function ArticleDetailPage() {
               </div>
             ) : null}
 
-            {error ? <div className="mt-5 text-sm text-rose-600">{error}</div> : null}
           </section>
 
           <section className="rounded-2xl border bg-white p-6 shadow-sm">

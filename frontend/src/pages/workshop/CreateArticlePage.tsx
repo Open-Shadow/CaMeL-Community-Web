@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { getMySkills, type SkillSummary } from '@/lib/skills'
 import { createArticle, publishArticle } from '@/lib/workshop'
 import { markdownToHtml, readMarkdownFile } from '@/lib/markdown'
+import { extractApiError } from '@/lib/utils'
 
 export default function CreateArticlePage() {
   const navigate = useNavigate()
@@ -73,7 +74,14 @@ export default function CreateArticlePage() {
 
   const handleSubmit = async (e: React.FormEvent, publishImmediately: boolean) => {
     e.preventDefault()
-    if (!form.title || !form.content) return
+    if (!form.title.trim()) {
+      setError('请填写文章标题')
+      return
+    }
+    if (!form.content.trim()) {
+      setError('请填写文章正文')
+      return
+    }
 
     setSubmitting(true)
     setError('')
@@ -91,7 +99,7 @@ export default function CreateArticlePage() {
       const finalArticle = publishImmediately ? await publishArticle(article.id) : article
       navigate(`/workshop/${finalArticle.id}`)
     } catch (err: any) {
-      setError(err.response?.data?.detail || '文章创建失败')
+      setError(extractApiError(err, '文章创建失败'))
     } finally {
       setSubmitting(false)
     }
@@ -222,7 +230,11 @@ export default function CreateArticlePage() {
                 <div>标题 5-120 字。</div>
                 <div>至少选择 1 个模型标签，自定义标签最多 5 个。</div>
               </div>
-              {error ? <div className="text-sm text-rose-600">{error}</div> : null}
+              {error ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {error}
+                </div>
+              ) : null}
               <div className="flex flex-col gap-3">
                 <Button
                   type="submit"

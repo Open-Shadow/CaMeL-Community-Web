@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { getMySkills, type SkillSummary } from '@/lib/skills'
 import { getArticle, updateArticle, publishArticle, type ArticleDetail } from '@/lib/workshop'
 import { markdownToHtml, readMarkdownFile } from '@/lib/markdown'
+import { extractApiError } from '@/lib/utils'
 
 export default function EditArticlePage() {
   const navigate = useNavigate()
@@ -73,7 +74,7 @@ export default function EditArticlePage() {
           content: data.content,
         })
       } catch (err: any) {
-        if (active) setError(err.response?.data?.detail || '文章加载失败')
+        if (active) setError(extractApiError(err, '文章加载失败'))
       } finally {
         if (active) setLoading(false)
       }
@@ -110,7 +111,11 @@ export default function EditArticlePage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!id || !form.title) return
+    if (!id) return
+    if (!form.title.trim()) {
+      setError('请填写文章标题')
+      return
+    }
 
     setSubmitting(true)
     setError('')
@@ -127,7 +132,7 @@ export default function EditArticlePage() {
       setArticle(updated)
       navigate(`/workshop/${updated.id}`)
     } catch (err: any) {
-      setError(err.response?.data?.detail || '保存失败')
+      setError(extractApiError(err, '保存失败'))
     } finally {
       setSubmitting(false)
     }
@@ -135,7 +140,11 @@ export default function EditArticlePage() {
 
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!id || !form.title) return
+    if (!id) return
+    if (!form.title.trim()) {
+      setError('请填写文章标题')
+      return
+    }
 
     setSubmitting(true)
     setError('')
@@ -152,7 +161,7 @@ export default function EditArticlePage() {
       const published = await publishArticle(Number(id))
       navigate(`/workshop/${published.id}`)
     } catch (err: any) {
-      setError(err.response?.data?.detail || '发布失败')
+      setError(extractApiError(err, '发布失败'))
     } finally {
       setSubmitting(false)
     }
@@ -324,7 +333,11 @@ export default function EditArticlePage() {
                 <div>标题 5-120 字。</div>
                 <div>至少选择 1 个模型标签，自定义标签最多 5 个。</div>
               </div>
-              {error ? <div className="text-sm text-rose-600">{error}</div> : null}
+              {error ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {error}
+                </div>
+              ) : null}
               <div className="flex flex-col gap-3">
                 <Button
                   type="submit"
