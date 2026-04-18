@@ -76,6 +76,7 @@ class ArticleAuthorOut(Schema):
     display_name: str
     level: str
     credit_score: int
+    avatar_url: str = ""
 
 
 class RelatedSkillOut(Schema):

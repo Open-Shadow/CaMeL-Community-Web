@@ -98,6 +98,7 @@ def _author_out(user) -> dict:
         "display_name": user.display_name or user.username,
         "level": user.level,
         "credit_score": user.credit_score,
+        "avatar_url": user.avatar_url or "",
     }
 
 

@@ -6,6 +6,7 @@ export interface ArticleAuthor {
   display_name: string
   level: string
   credit_score: number
+  avatar_url: string
 }
 
 export interface RelatedSkillSummary {
