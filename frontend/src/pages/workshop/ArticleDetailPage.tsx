@@ -5,7 +5,6 @@ import { Download, Eye, Link2, Sparkles } from 'lucide-react'
 import { EmptyState } from '@/components/shared/empty-state'
 import { DetailSkeleton } from '@/components/shared/loading-skeleton'
 import { CommentSection } from '@/components/workshop/CommentSection'
-import ArticleCard from '@/components/workshop/ArticleCard'
 import { ArticleRenderer } from '@/components/workshop/ArticleRenderer'
 import { VoteButtons } from '@/components/workshop/VoteButtons'
 import { TipDialog } from '@/components/workshop/tip-dialog'
@@ -316,22 +315,6 @@ export default function ArticleDetailPage() {
             }}
           />
 
-          {relatedArticles.length > 0 ? (
-            <section className="space-y-4">
-              <div>
-                <h2 className="text-2xl font-semibold tracking-tight">相关文章</h2>
-                <p className="text-sm text-muted-foreground">根据模型标签、关联 Skill 和内容主题推荐。</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {relatedArticles.map((item) => (
-                  <div key={item.id} className="space-y-2">
-                    <ArticleCard article={item} onClick={() => navigate(`/workshop/${item.id}`)} />
-                    <p className="px-1 text-xs text-muted-foreground">{item.recommendation_reason}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </div>
 
         <aside className="space-y-5">
@@ -386,6 +369,26 @@ export default function ArticleDetailPage() {
               ) : null}
             </CardContent>
           </Card>
+
+          {relatedArticles.length > 0 ? (
+            <Card>
+              <CardContent className="space-y-3 p-5">
+                <div className="text-sm font-medium text-muted-foreground">相关文章</div>
+                <div className="space-y-3">
+                  {relatedArticles.map((item) => (
+                    <div
+                      key={item.id}
+                      className="cursor-pointer space-y-1 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                      onClick={() => navigate(`/workshop/${item.id}`)}
+                    >
+                      <div className="text-sm font-medium leading-snug">{item.title}</div>
+                      <p className="text-xs text-muted-foreground">{item.recommendation_reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </aside>
       </div>
 
