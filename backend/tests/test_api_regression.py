@@ -890,6 +890,48 @@ class TestHTTPCallDownloadOnly:
         body = resp.json()
         assert "下载" in body.get("detail", "")
 
+    @pytest.mark.django_db
+    def test_call_skill_with_nested_prompts_succeeds(self, client, user):
+        """POST /api/skills/{id}/call supports prompts nested under a top-level directory."""
+        package = _make_zip(
+            {
+                "bundle/SKILL.md": SKILL_MD.format(version="1.0.0"),
+                "bundle/prompts/system.txt": "You are a test skill.",
+                "bundle/prompts/user_template.txt": "Nested Echo: {{input}}",
+            }
+        )
+        skill = Skill.objects.create(
+            creator=user,
+            name="Nested Prompt Skill",
+            slug="nested-prompt-skill",
+            description="A skill with prompts under a top-level directory",
+            category="CODE_DEV",
+            pricing_model=PricingModel.FREE,
+            status=SkillStatus.APPROVED,
+            current_version="1.0.0",
+            package_file=package,
+            package_sha256="n" * 64,
+            package_size=100,
+        )
+        SkillVersion.objects.create(
+            skill=skill,
+            version="1.0.0",
+            package_file=package,
+            package_sha256="n" * 64,
+            status=VersionStatus.APPROVED,
+        )
+
+        resp = client.post(
+            f"/api/skills/{skill.id}/call",
+            data=json.dumps({"input_text": "hello nested"}),
+            content_type="application/json",
+            **_jwt_header(user),
+        )
+
+        assert resp.status_code == 200, resp.content
+        body = resp.json()
+        assert "hello nested" in body["output_text"]
+
 
 class TestHTTPSkillSubmit:
     """HTTP-level tests for the submit-for-review endpoint."""

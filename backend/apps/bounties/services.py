@@ -62,6 +62,28 @@ class BountyService:
             return None
         return bounty.accepted_application.applicant
 
+    @staticmethod
+    def _normalize_hunter_ratio(
+        result: str,
+        hunter_ratio: float | Decimal | None,
+        *,
+        default_partial: Decimal | None = None,
+    ) -> Decimal:
+        if result == "HUNTER_WIN":
+            return Decimal("1.00")
+        if result == "CREATOR_WIN":
+            return Decimal("0.00")
+        if result != "PARTIAL":
+            raise BountyError("仲裁结果无效")
+        if hunter_ratio is None:
+            if default_partial is not None:
+                return quantize_amount(default_partial)
+            raise BountyError("PARTIAL 仲裁必须指定 hunter_ratio")
+        normalized = quantize_amount(hunter_ratio)
+        if not (Decimal("0.00") <= normalized <= Decimal("1.00")):
+            raise BountyError("hunter_ratio 必须在 0 到 1 之间")
+        return normalized
+
     @classmethod
     def process_automations(cls):
         now = timezone.now()
@@ -236,6 +258,31 @@ class BountyService:
         bounty.accepted_application = application
         bounty.status = BountyStatus.IN_PROGRESS
         bounty.save(update_fields=["accepted_application", "status"])
+        return bounty
+
+    @classmethod
+    @transaction.atomic
+    def reject_application(cls, actor, bounty: Bounty, application_id: int, *, reason: str = "") -> Bounty:
+        if bounty.creator_id != actor.id:
+            raise BountyError("只有发布者可以拒绝申请")
+        if bounty.status != BountyStatus.OPEN:
+            raise BountyError("当前状态下不能拒绝申请")
+
+        application = BountyApplication.objects.filter(
+            id=application_id,
+            bounty=bounty,
+        ).select_related("applicant").first()
+        if not application:
+            raise BountyError("申请不存在")
+
+        applicant_name = application.applicant.display_name or application.applicant.username
+        application.delete()
+        feedback = reason.strip()
+        if feedback:
+            content = f"已拒绝 {applicant_name} 的申请：{feedback[:940]}"
+        else:
+            content = f"已拒绝 {applicant_name} 的申请"
+        BountyComment.objects.create(bounty=bounty, author=actor, content=content)
         return bounty
 
     @classmethod
@@ -463,20 +510,22 @@ class BountyService:
             # Appealed case: community arbitration already settled (money moved).
             # Admin must confirm the existing settlement — contradictory results
             # would create inconsistent metadata since funds cannot be re-moved.
-            if result not in {"HUNTER_WIN", "CREATOR_WIN", "PARTIAL"}:
-                raise BountyError("仲裁结果无效")
+            normalized_ratio = cls._normalize_hunter_ratio(
+                result,
+                hunter_ratio,
+                default_partial=arbitration.hunter_ratio,
+            )
             if result != arbitration.result:
                 raise BountyError(
                     f"仲裁资金已按 {arbitration.result} 结果分配，"
                     f"无法改判为 {result}，如需变更请先撤销原结算"
                 )
             if result == "PARTIAL":
-                requested_ratio = quantize_amount(hunter_ratio or 0)
-                settled_ratio = arbitration.hunter_ratio or Decimal("0")
-                if requested_ratio != settled_ratio:
+                settled_ratio = arbitration.hunter_ratio or Decimal("0.00")
+                if normalized_ratio != settled_ratio:
                     raise BountyError(
                         f"仲裁资金已按比例 {settled_ratio} 分配，"
-                        f"无法变更为 {requested_ratio}，如需变更请先撤销原结算"
+                        f"无法变更为 {normalized_ratio}，如需变更请先撤销原结算"
                     )
             arbitration.admin_final_result = result
             arbitration.save(update_fields=["admin_final_result"])
@@ -574,8 +623,7 @@ class BountyService:
         if not accepted_user:
             raise BountyError("当前悬赏没有接单者，无法结算仲裁")
 
-        ratio = quantize_amount(hunter_ratio or 0)
-        ratio = min(max(ratio, Decimal("0.00")), Decimal("1.00"))
+        ratio = cls._normalize_hunter_ratio(result, hunter_ratio)
         payout = quantize_amount(bounty.reward * ratio)
         refund = bounty.reward - payout  # derive from payout to guarantee payout + refund == reward
 

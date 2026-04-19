@@ -75,34 +75,46 @@ def login_required(func):
     the Authorization header.
     """
     from functools import wraps
+    from inspect import signature
+    from typing import get_type_hints
     @wraps(func)
     def wrapper(request, *args, **kwargs):
         user = getattr(request, 'auth', None)
         if not user or user is _ANONYMOUS:
             raise HttpError(401, "需要登录")
         return func(request, *args, **kwargs)
+    wrapper.__signature__ = signature(func)
+    wrapper.__annotations__ = get_type_hints(func)
     return wrapper
 
 
 def moderator_required(func):
     """Requires moderator role or above."""
     from functools import wraps
+    from inspect import signature
+    from typing import get_type_hints
     @wraps(func)
     def wrapper(request, *args, **kwargs):
         user = getattr(request, 'auth', None)
         if not user or user.role not in ('MODERATOR', 'ADMIN'):
             raise HttpError(403, "需要版主权限")
         return func(request, *args, **kwargs)
+    wrapper.__signature__ = signature(func)
+    wrapper.__annotations__ = get_type_hints(func)
     return wrapper
 
 
 def admin_required(func):
     """Requires admin role."""
     from functools import wraps
+    from inspect import signature
+    from typing import get_type_hints
     @wraps(func)
     def wrapper(request, *args, **kwargs):
         user = getattr(request, 'auth', None)
         if not user or user.role != 'ADMIN':
             raise HttpError(403, "需要管理员权限")
         return func(request, *args, **kwargs)
+    wrapper.__signature__ = signature(func)
+    wrapper.__annotations__ = get_type_hints(func)
     return wrapper

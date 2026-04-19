@@ -141,6 +141,11 @@ export async function acceptBountyApplication(id: number, applicationId: number)
   return response.data
 }
 
+export async function rejectBountyApplication(id: number, applicationId: number) {
+  const response = await api.post<BountyDetail>(`/bounties/${id}/reject/${applicationId}`)
+  return response.data
+}
+
 export async function addBountyComment(id: number, content: string) {
   return api.post(`/bounties/${id}/comments`, { content })
 }

@@ -143,6 +143,13 @@ class SkillService:
     TRENDING_CACHE_KEY = "skills:trending"
     RECOMMENDATION_CACHE_KEY = "skills:recommended:user:{user_id}"
 
+    @staticmethod
+    def _json_safe_metadata(data: dict) -> dict:
+        safe: dict = {}
+        for key, value in data.items():
+            safe[key] = float(value) if isinstance(value, Decimal) else value
+        return safe
+
     @classmethod
     def _clean_tags(cls, tags: list[str] | None) -> list[str]:
         if not tags:
@@ -339,7 +346,7 @@ class SkillService:
                 status=VersionStatus.REJECTED if skill.status == SkillStatus.APPROVED else VersionStatus.SCANNING,
                 # Store deferred metadata so _promote_version can apply it when
                 # this version is approved (approved skills only).
-                pending_metadata=payload if defer_metadata else {},
+                pending_metadata=cls._json_safe_metadata(payload) if defer_metadata else {},
             )
 
             if skill.status != SkillStatus.APPROVED:
@@ -596,7 +603,6 @@ class SkillService:
                 # Promote the approved version to live pointers
                 cls._promote_version(skill, latest_version)
                 skill.save()
-                from apps.search.services import SearchService
                 SearchService.sync_skill(skill)
                 NotificationService.send(
                     recipient=skill.creator,
@@ -876,7 +882,13 @@ class SkillService:
             ).first()
 
         if not selected_version_obj:
-            # Default: latest approved version
+            selected_version_obj = skill.versions.filter(
+                version=skill.current_version,
+                status=VersionStatus.APPROVED,
+            ).first()
+
+        if not selected_version_obj:
+            # Fallback: latest approved version for legacy data
             selected_version_obj = skill.versions.filter(
                 status=VersionStatus.APPROVED,
             ).order_by("-created_at").first()
@@ -932,7 +944,10 @@ class SkillService:
         try:
             import zipfile
             from io import BytesIO
+            from pathlib import PurePosixPath
 
+            if hasattr(package_file, "open"):
+                package_file.open("rb")
             content = package_file.read() if hasattr(package_file, 'read') else package_file
             if hasattr(package_file, 'seek'):
                 package_file.seek(0)
@@ -940,8 +955,14 @@ class SkillService:
             file_contents: dict[str, str] = {}
             with zipfile.ZipFile(BytesIO(content if isinstance(content, bytes) else content.read())) as zf:
                 for name in zf.namelist():
-                    if name.startswith("prompts/") and name.endswith((".txt", ".md")):
-                        file_contents[name] = zf.read(name).decode("utf-8", errors="replace")
+                    normalized_parts = PurePosixPath(name).parts
+                    if "prompts" not in normalized_parts:
+                        continue
+                    if not name.endswith((".txt", ".md")):
+                        continue
+                    prompts_index = normalized_parts.index("prompts")
+                    relative_name = "/".join(normalized_parts[prompts_index:])
+                    file_contents[relative_name] = zf.read(name).decode("utf-8", errors="replace")
 
             system_prompt = file_contents.get("prompts/system.txt") or file_contents.get("prompts/system.md", "")
             user_template = file_contents.get("prompts/user_template.txt") or file_contents.get("prompts/user_template.md", "")
@@ -957,6 +978,8 @@ class SkillService:
 
             return f"[基于 Prompt 模板执行] {rendered[:200]}"
 
+        except FileNotFoundError:
+            raise ValueError("未找到文件包，该 Skill 当前无法在线调用")
         except zipfile.BadZipFile:
             raise ValueError("文件包解析失败")
         except ValueError:
@@ -1324,7 +1347,6 @@ class SkillReportService:
                     # Promote the latest safe version to live pointers
                     SkillService._promote_version(skill, fallback)
                     skill.save()
-                    from apps.search.services import SearchService
                     SearchService.sync_skill(skill)
                 else:
                     # No safe versions left — archive the whole skill

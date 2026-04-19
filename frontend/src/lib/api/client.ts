@@ -227,8 +227,8 @@ export interface Notification {
 export const authApi = {
   login: (email: string, password: string) =>
     api.post<AuthTokens>('/auth/login', { email, password }),
-  register: (email: string, password: string, display_name?: string) =>
-    api.post<AuthTokens>('/auth/register', { email, password, display_name }),
+  register: (email: string, password: string, display_name?: string, invite_code?: string) =>
+    api.post<MessageResponse>('/auth/register', { email, password, display_name, invite_code }),
   logout: (refresh: string) =>
     api.post('/auth/logout', { refresh }),
   refresh: (refresh: string) =>

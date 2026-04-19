@@ -107,7 +107,7 @@ def get_tokens_for_user(user):
 # API Endpoints
 # =============================================================================
 
-@router.post("/register", response={201: TokenOutput, 400: MessageOutput})
+@router.post("/register", response={201: MessageOutput, 400: MessageOutput})
 def register(request, data: RegisterInput):
     """Register a new user with email and password."""
     normalized_email = data.email.strip().lower()
@@ -163,8 +163,7 @@ def register(request, data: RegisterInput):
 
     AuthService.send_verification_email(request, user, signup=True)
 
-    tokens = get_tokens_for_user(user)
-    return Status(201, tokens)
+    return Status(201, {"message": "注册成功，请查收验证邮件后登录"})
 
 
 @router.get("/invite-codes/{code}/validate", response={200: InviteValidationOutput, 404: MessageOutput})
@@ -194,7 +193,7 @@ def login(request, data: LoginInput):
     if not user.check_password(data.password):
         return Status(401, {"message": "邮箱或密码错误"})
 
-    if not user.is_active:
+    if not AuthService.is_email_verified(user):
         return 401, {"message": "请先验证您的邮箱"}
 
     tokens = get_tokens_for_user(user)

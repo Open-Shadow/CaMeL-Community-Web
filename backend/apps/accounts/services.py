@@ -252,6 +252,11 @@ class InvitationService:
         return Invitation.objects.create(inviter=inviter, code=cls._generate_unique_code())
 
     @classmethod
+    def generate_code(cls, inviter: User) -> str:
+        """Compatibility wrapper for legacy invitation API."""
+        return cls.get_or_create_shareable_invitation(inviter).code
+
+    @classmethod
     def validate_code(cls, code: str | None) -> Invitation:
         normalized_code = cls.normalize_code(code)
         if not normalized_code:
@@ -265,6 +270,19 @@ class InvitationService:
         if invitation.used_by_id:
             raise InvitationError("邀请码已被使用")
         return invitation
+
+    @classmethod
+    def get_stats(cls, inviter: User) -> dict:
+        dashboard = cls.get_dashboard(inviter)
+        return {
+            "total_codes": dashboard["total_codes_generated"],
+            "used_codes": dashboard["registered_invites"],
+            "remaining_this_month": dashboard["monthly_credit_remaining"],
+        }
+
+    @classmethod
+    def get_my_invitations(cls, inviter: User):
+        return Invitation.objects.filter(inviter=inviter).order_by("-used_at", "-created_at")
 
     @classmethod
     @transaction.atomic
@@ -373,7 +391,7 @@ class InvitationService:
 
         invitation = (
             Invitation.objects.select_for_update()
-            .select_related("inviter", "used_by")
+            .select_related("inviter")
             .filter(code=normalized_code)
             .first()
         )

@@ -19,6 +19,7 @@ import {
   castArbitrationVote,
   createBountyDispute,
   getBounty,
+  rejectBountyApplication,
   requestBountyRevision,
   startArbitration,
   submitArbitrationStatement,
@@ -183,9 +184,14 @@ export default function BountyDetailPage() {
                         </div>
                       </div>
                       {isCreator && data.status === 'OPEN' ? (
-                        <Button size="sm" onClick={() => void perform(() => acceptBountyApplication(data.id, application.id))}>
-                          接受申请
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => void perform(() => acceptBountyApplication(data.id, application.id))}>
+                            接受申请
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => void perform(() => rejectBountyApplication(data.id, application.id))}>
+                            拒绝申请
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                     <p className="mt-3 text-sm text-muted-foreground">{application.proposal}</p>

@@ -40,6 +40,10 @@ interface AuthContextType {
   completeSocialLogin: (code: string) => Promise<void>;
 }
 
+interface MessageResponse {
+  message: string;
+}
+
 // Create context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -193,15 +197,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (email: string, password: string, displayName?: string, inviteCode?: string) => {
-    const response = await api.post('/auth/register', {
+    await api.post<MessageResponse>('/auth/register', {
       email,
       password,
       display_name: displayName,
       invite_code: inviteCode,
     });
-    const tokens: AuthTokens = response.data;
-    setStoredTokens(tokens);
-    await refreshUser();
   };
 
   const loginWithTokens = async (tokens: AuthTokens) => {
