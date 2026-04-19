@@ -89,12 +89,14 @@ class TipService:
             reference_id=str(article_id),
         )
 
-        return Tip.objects.create(
+        tip = Tip.objects.create(
             article=article,
             tipper=tipper,
             recipient=recipient,
             amount=amount,
         )
+        cache.delete("tip_leaderboard")
+        return tip
 
     @classmethod
     def get_article_tips(cls, article_id: int, limit: int = 20):

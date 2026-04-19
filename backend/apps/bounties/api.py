@@ -1,9 +1,8 @@
 """Bounties API routes."""
-from __future__ import annotations
 
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
-from ninja import Router
+from ninja import Body, Router
 from ninja.errors import HttpError
 
 from apps.bounties.models import Bounty
@@ -269,6 +268,23 @@ def accept_application(request, bounty_id: int, application_id: int):
     )
 
 
+@router.post("/{bounty_id}/reject/{application_id}", response={200: BountyDetailOut, 400: MessageOut}, auth=AuthBearer())
+def reject_application(request, bounty_id: int, application_id: int):
+    bounty = get_object_or_404(Bounty.objects.select_related("creator", "accepted_application__applicant"), id=bounty_id)
+    try:
+        BountyService.reject_application(request.auth, bounty, application_id)
+    except BountyError as exc:
+        return 400, {"message": str(exc)}
+    bounty.refresh_from_db()
+    return _detail_out(
+        Bounty.objects.select_related("creator", "accepted_application__applicant").prefetch_related(
+            "applications__applicant",
+            "comments__author",
+        ).get(id=bounty.id),
+        viewer=request.auth,
+    )
+
+
 @router.post("/{bounty_id}/comments", response={201: MessageOut, 400: MessageOut}, auth=AuthBearer())
 def add_comment(request, bounty_id: int, data: BountyCommentInput):
     bounty = get_object_or_404(Bounty, id=bounty_id)
@@ -411,7 +427,7 @@ def appeal_arbitration(request, bounty_id: int, data: ArbitrationAppealInput):
 
 @router.post("/{bounty_id}/arbitration/admin-finalize", response={200: BountyDetailOut, 400: MessageOut}, auth=AuthBearer())
 @admin_required
-def admin_finalize_arbitration(request, bounty_id: int, data: AdminArbitrationDecisionInput):
+def admin_finalize_arbitration(request, bounty_id: int, data: AdminArbitrationDecisionInput = Body(...)):
     bounty = get_object_or_404(Bounty.objects.select_related("creator", "accepted_application__applicant"), id=bounty_id)
     try:
         BountyService.admin_finalize(request.auth, bounty, data.result, data.hunter_ratio)

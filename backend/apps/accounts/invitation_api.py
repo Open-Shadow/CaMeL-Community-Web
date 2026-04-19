@@ -81,7 +81,8 @@ def list_invitations(request):
              auth=None)
 def validate_invite_code(request, data: ValidateCodeInput):
     """Validate an invitation code (public endpoint)."""
-    _, error = InvitationService.validate_code(data.code)
-    if error:
-        return 400, {"message": error}
+    try:
+        InvitationService.validate_code(data.code)
+    except ValueError as e:
+        return 400, {"message": str(e)}
     return 200, {"message": "邀请码有效"}
